@@ -48,5 +48,11 @@ public class RequestMessage {
         return messagedigest;
     }
 
+    public void clearvariables(){
+        certificates.clear();
+        InitStringMessage.clear();
+        IntNumbers.clear();
+        messagedigest.clear();
+    }
     
 }
