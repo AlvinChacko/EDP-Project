@@ -13,12 +13,12 @@ import java.util.ArrayList;
  *
  * @author Alvin
  */
-public class RequestMessage {
+public class RequestMessage implements java.io.Serializable {
 
     protected ArrayList<X509Certificate> certificates = new ArrayList<>();
-    protected ArrayList InitStringMessage = new ArrayList<>();
+    protected ArrayList <String>InitStringMessage = new ArrayList<>();
     protected ArrayList IntNumbers = new ArrayList<>();
-    protected ArrayList<MessageDigest> messagedigest =  new ArrayList<>();
+    protected ArrayList<byte[]> encrypteddata =  new ArrayList<>();
 
     /**
      * @return the certificates
@@ -44,15 +44,15 @@ public class RequestMessage {
     /**
      * @return the messagedigest
      */
-    public ArrayList<MessageDigest> getMessagedigest() {
-        return messagedigest;
+    public ArrayList<byte[]> getMessagedigest() {
+        return encrypteddata;
     }
 
     public void clearvariables(){
         certificates.clear();
         InitStringMessage.clear();
         IntNumbers.clear();
-        messagedigest.clear();
+        encrypteddata.clear();
     }
     
 }

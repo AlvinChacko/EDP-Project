@@ -22,6 +22,7 @@ import java.net.Socket;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -69,13 +70,12 @@ public class Merchant {
         clientSocket = MerchantServer.accept();
         c_os = new ObjectOutputStream(clientSocket.getOutputStream());
         c_is = new ObjectInputStream(clientSocket.getInputStream());
-        c_os.writeUTF("Connected to Client");
         System.out.println("Conected");
         RequestMessage initmessage = new RequestMessage();
         initmessage.clearvariables();
         initmessage = (RequestMessage) c_is.readObject();
         if (initmessage.InitStringMessage.contains("Initiate")) {
-            connecttobank();
+//            connecttobank();
             initiateresponse();
             if (c_is.readUTF().equals("Purchase Request")) {
                 purchaserequestprocessing();
@@ -105,6 +105,14 @@ public class Merchant {
         c_os.writeUTF("Purchase Processing Completed");
     }
 
+    // Used to verify the digital signature, params are data to be checked and the signature
+    public boolean verifySignature(byte[] data, byte[] signature, String keyFile) throws Exception {
+        Signature sig = Signature.getInstance("SHA1withRSA");
+        sig.initVerify(customercertificate.getPublicKey());
+        sig.update(data);
+        return sig.verify(signature);
+    }
+
     //Payment authorization phase
     public static void authorizationrequest() throws IOException, ClassNotFoundException, NoSuchAlgorithmException, NoSuchProviderException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, BadPaddingException {
 
@@ -124,7 +132,9 @@ public class Merchant {
 
         //encrypt using session key
         desCipher.init(Cipher.ENCRYPT_MODE, sessionkey);
-        byte[] encrpyted = desCipher.doFinal(message.InitStringMessage.toString().getBytes());
+        desCipher.update(message.InitStringMessage.get(0).getBytes());
+        desCipher.update(message.InitStringMessage.get(1).getBytes());
+        byte[] encrpyted = desCipher.doFinal();
 
         desCipher = Cipher.getInstance("RSA");
         desCipher.init(Cipher.WRAP_MODE, bankcertificate.getPublicKey());
@@ -184,7 +194,7 @@ public class Merchant {
             desCipher.init(Cipher.WRAP_MODE, bankcertificate.getPublicKey());
             byte[] wrappedsessionkey = desCipher.wrap(sessionkey);
 
-        //send stuff
+            //send stuff
             //message
             b_os2.write(wrappedsessionkey);
             b_os2.write(encrpyted);
@@ -232,7 +242,7 @@ public class Merchant {
         try {
             //Generate self signed certificate
             certificate = kgen.getSelfCertificate(new X500Name("CN=ROOT"), (long) 365 * 24 * 3600);
-            System.out.println("Certificate : " + certificate.toString());
+            //System.out.println("Certificate : " + certificate.toString());
         } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidKeyException | IOException | CertificateException | SignatureException ex) {
             ex.printStackTrace();
         }
