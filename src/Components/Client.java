@@ -25,6 +25,7 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SealedObject;
 import javax.crypto.SecretKey;
 import sun.security.tools.keytool.CertAndKeyGen;
 import sun.security.x509.X500Name;
@@ -50,6 +51,8 @@ public class Client {
     byte[] paymentdigest;
     byte[] combinedMD;
     byte[] dualsignature;
+    RequestMessage init = new RequestMessage();
+    RequestMessage purchaserequest = new RequestMessage();
 
     public void connecttomerchant() throws IOException {
         merchant = new Socket("127.0.0.1", 9999);
@@ -60,7 +63,6 @@ public class Client {
 
     public void initiatetomerchant() {
         try {
-            RequestMessage init = new RequestMessage();
             init.clearvariables();
             init.getInitStringMessage().add("Initiate");
             os.writeObject(init);
@@ -82,6 +84,7 @@ public class Client {
     }
 
     public void encryptpaymentinfo() throws InvalidKeyException {
+        purchaserequest.clearvariables();
         try {
             //generate sessionkey
             KeyGenerator kgen = KeyGenerator.getInstance("AES", "BC");
@@ -92,12 +95,13 @@ public class Client {
 
             //encrypt using session key
             desCipher.init(Cipher.ENCRYPT_MODE, sessionkey);
-            
+            SealedObject sealedpayment = new SealedObject(creditcardinfo, desCipher);
+            purchaserequest.sealedobject.add(sealedpayment);
 
-            desCipher = Cipher.getInstance("RSA");
             desCipher.init(Cipher.WRAP_MODE, Bank_certificate.getPublicKey());
             byte[] wrappedsessionkey = desCipher.wrap(sessionkey);
-        } catch (NoSuchAlgorithmException | NoSuchProviderException | NoSuchPaddingException | IllegalBlockSizeException ex) {
+            purchaserequest.encrypteddata.add(wrappedsessionkey);
+        } catch (NoSuchAlgorithmException | NoSuchProviderException | NoSuchPaddingException | IllegalBlockSizeException | IOException ex) {
             Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
         }
     }

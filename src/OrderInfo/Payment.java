@@ -9,7 +9,7 @@ package OrderInfo;
  *
  * @author Alvin
  */
-public class Payment {
+public class Payment implements java.io.Serializable{
     private String credicardnumber;
     private int cvv;
     private String Fname;

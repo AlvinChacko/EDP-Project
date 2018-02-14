@@ -8,6 +8,7 @@ package Components;
 import java.security.MessageDigest;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import javax.crypto.SealedObject;
 
 /**
  *
@@ -19,6 +20,7 @@ public class RequestMessage implements java.io.Serializable {
     protected ArrayList <String>InitStringMessage = new ArrayList<>();
     protected ArrayList IntNumbers = new ArrayList<>();
     protected ArrayList<byte[]> encrypteddata =  new ArrayList<>();
+    protected ArrayList<SealedObject> sealedobject =  new ArrayList<>();
 
     /**
      * @return the certificates
@@ -53,6 +55,7 @@ public class RequestMessage implements java.io.Serializable {
         InitStringMessage.clear();
         IntNumbers.clear();
         encrypteddata.clear();
+        sealedobject.clear();
     }
     
 }

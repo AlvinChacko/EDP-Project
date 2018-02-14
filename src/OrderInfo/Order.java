@@ -11,25 +11,25 @@ import java.util.ArrayList;
  *
  * @author Alvin
  */
-public class Order {
-    private int transaction_id;
+public class Order implements java.io.Serializable{
+    private String transaction_id;
     private double tax, total;
     private int subtotal;
     private ArrayList <String> products = new ArrayList<>();
     private String Orderstatus, paymentstatus;
 
-    public Order(int transaction_id) {
+    public Order(String transaction_id) {
         this.transaction_id = transaction_id;
         Orderstatus = "Pending";
         paymentstatus = "Pending";
     }
     
 
-    public int getTransaction_id() {
+    public String getTransaction_id() {
         return transaction_id;
     }
 
-    public void setTransaction_id(int transaction_id) {
+    public void setTransaction_id(String transaction_id) {
         this.transaction_id = transaction_id;
     }
 

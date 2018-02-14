@@ -132,18 +132,13 @@ public class Merchant {
 
         //encrypt using session key
         desCipher.init(Cipher.ENCRYPT_MODE, sessionkey);
-        desCipher.update(message.InitStringMessage.get(0).getBytes());
-        desCipher.update(message.InitStringMessage.get(1).getBytes());
-        byte[] encrpyted = desCipher.doFinal();
-
-        desCipher = Cipher.getInstance("RSA");
+        byte[] encrpyted1 = desCipher.update(message.InitStringMessage.get(0).getBytes()); 
+        byte[] encrpyted2 = desCipher.doFinal(message.InitStringMessage.get(1).getBytes());
         desCipher.init(Cipher.WRAP_MODE, bankcertificate.getPublicKey());
         byte[] wrappedsessionkey = desCipher.wrap(sessionkey);
-
-        //send stuff
-        //message
-        b_os2.write(wrappedsessionkey);
-        b_os2.write(encrpyted);
+        message.encrypteddata.add(encrpyted1);
+        message.encrypteddata.add(encrpyted2);
+        message.encrypteddata.add(wrappedsessionkey);
 
         //TO DO: SEND PI AND SESSION KEY 1
         message.certificates.add(customercertificate);
