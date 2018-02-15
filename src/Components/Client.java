@@ -18,7 +18,6 @@ import java.security.Signature;
 import java.security.cert.X509Certificate;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
-import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.crypto.Cipher;
@@ -72,19 +71,53 @@ public class Client {
             order = new Order(init.InitStringMessage.get(0));
             Merchant_certificate = init.certificates.get(0);
             Bank_certificate = init.certificates.get(1);
-
             System.out.println("Order created with transaction id: " + order.getTransaction_id());
         } catch (IOException | ClassNotFoundException ex) {
             Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
+    // Creating the purchase message to send to merchant
     public void purchaserequest() {
-        dualsignature();
+        purchaserequest.clearvariables();
+        // Creates dual signature and pass the dual signature in index 0 of encrypteddata
+        dualsignature(); 
+        // Creates the encrypted payment for bank
+        // Sealed Payment Object in the first index of sealed object
+        // Wrapped session key with bank public key in the index 1 of encrypted data
+        encryptpaymentinfo(); 
+        //Index 2 and 3 will have orderdigest and paymentdigest
+        purchaserequest.encrypteddata.add(orderdigest);
+        purchaserequest.encrypteddata.add(paymentdigest);
+        //Passing the clinet certificate in first index
+        purchaserequest.certificates.add(Client_certificate);
+        try {
+            os.writeObject(purchaserequest);
+        } catch (IOException ex) {
+            Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
 
-    public void encryptpaymentinfo() throws InvalidKeyException {
-        purchaserequest.clearvariables();
+    public void dualsignature() {
+        try {
+            MessageDigest duals = MessageDigest.getInstance("SHA-1");
+            createOrderMD(); // Create Order MD
+            createPaymentMD(); // Create Payment MD
+            duals.update(orderdigest); // Update the message dist to include OIMD and PIMD
+            duals.update(paymentdigest);
+            combinedMD = duals.digest(); // Create the digest of the combined
+            // Creating a digital signature 
+            Signature dsign = Signature.getInstance("SHA1withRSA");
+            dsign.initSign(keypair.getPrivateKey());
+            dsign.update(combinedMD);
+            dualsignature = dsign.sign();
+            purchaserequest.encrypteddata.add(dualsignature);
+        } catch (NoSuchAlgorithmException | InvalidKeyException | SignatureException ex) {
+            Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    public void encryptpaymentinfo() {
         try {
             //generate sessionkey
             KeyGenerator kgen = KeyGenerator.getInstance("AES", "BC");
@@ -101,7 +134,7 @@ public class Client {
             desCipher.init(Cipher.WRAP_MODE, Bank_certificate.getPublicKey());
             byte[] wrappedsessionkey = desCipher.wrap(sessionkey);
             purchaserequest.encrypteddata.add(wrappedsessionkey);
-        } catch (NoSuchAlgorithmException | NoSuchProviderException | NoSuchPaddingException | IllegalBlockSizeException | IOException ex) {
+        } catch (NoSuchAlgorithmException | NoSuchProviderException | NoSuchPaddingException | IllegalBlockSizeException | IOException | InvalidKeyException ex) {
             Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
@@ -130,24 +163,6 @@ public class Client {
             paymentd.update(baos.toByteArray());
             paymentdigest = paymentd.digest();
         } catch (NoSuchAlgorithmException | IOException ex) {
-            Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
-        }
-    }
-
-    public void dualsignature() {
-        try {
-            MessageDigest duals = MessageDigest.getInstance("SHA-1");
-            createOrderMD(); // Create Order MD
-            createPaymentMD(); // Create Payment MD
-            duals.update(orderdigest); // Update the message dist to include OIMD and PIMD
-            duals.update(paymentdigest);
-            combinedMD = duals.digest(); // Create the digest of the combined
-            // Creating a digital signature 
-            Signature dsign = Signature.getInstance("SHA1withRSA");
-            dsign.initSign(keypair.getPrivateKey());
-            dsign.update(combinedMD);
-            dualsignature = dsign.sign();
-        } catch (NoSuchAlgorithmException | InvalidKeyException | SignatureException ex) {
             Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
         }
     }

@@ -96,9 +96,10 @@ public class Merchant {
     }
 
     public static void purchaserequestprocessing() throws IOException, ClassNotFoundException {
-
+        RequestMessage purchasemessage = new RequestMessage();
         //MIGHT HAVE TO READ MORE THINGS HERE
-        customercertificate = (X509Certificate) c_is.readObject();
+        purchasemessage = (RequestMessage) c_is.readObject();
+        customercertificate = purchasemessage.certificates.get(0);
 
         ///CHECK IF DUAL SIGNATURE IS CORRECT
         //send purchase response 
@@ -132,7 +133,7 @@ public class Merchant {
 
         //encrypt using session key
         desCipher.init(Cipher.ENCRYPT_MODE, sessionkey);
-        byte[] encrpyted1 = desCipher.update(message.InitStringMessage.get(0).getBytes()); 
+        byte[] encrpyted1 = desCipher.update(message.InitStringMessage.get(0).getBytes());
         byte[] encrpyted2 = desCipher.doFinal(message.InitStringMessage.get(1).getBytes());
         desCipher.init(Cipher.WRAP_MODE, bankcertificate.getPublicKey());
         byte[] wrappedsessionkey = desCipher.wrap(sessionkey);
