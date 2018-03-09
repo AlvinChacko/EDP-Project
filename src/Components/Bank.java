@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 /**
  *
  * @author BHATT
@@ -14,8 +9,7 @@
  */
 package Components;
 
-import java.io.PrintStream;
-import java.util.Scanner;
+import static Components.Merchant.bankcertificate;
 import java.io.*;
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -23,13 +17,9 @@ import java.net.Socket;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
-import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.crypto.BadPaddingException;
@@ -39,9 +29,7 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
-import sun.misc.BASE64Decoder;
-import sun.misc.BASE64Encoder;
-import static sun.security.krb5.Confounder.bytes;
+import javax.crypto.SecretKey;
 
 /**
  *
@@ -49,18 +37,23 @@ import static sun.security.krb5.Confounder.bytes;
  */
 public class Bank {
 
-    static PrivateKey myPR;
-    private static byte[] bytes;
-    static PublicKey merPU;
+    CertAndKeyGen kpair = generateKeypair();
+    X509Certificate Bank_certificate = createcertificate(kpair);
+    ServerSocket BankServer = null;
+    Socket merchantSocket = null;
+    ObjectInputStream is;
+    ObjectOutputStream os;
+    X509Certificate Merchant_certificate;
+    RequestMessage authorizationmessage = new RequestMessage();
+    static RequestMessage authorizationResponseMessage = new RequestMessage();
+    static RequestMessage paymentResponseMessage = new RequestMessage();
 
-    public static void openbankserver() throws IOException {
-        ServerSocket BankServer = null;
-        Socket BankSocket = null;
+    public void openbankserver() throws IOException {
         BankServer = new ServerSocket(1000);
-        BankSocket = BankServer.accept();
-        DataOutputStream os = new DataOutputStream(BankSocket.getOutputStream());
-        DataInputStream is = new DataInputStream(BankSocket.getInputStream());
-        System.out.println(is.readUTF());
+        merchantSocket = BankServer.accept();
+        os = new ObjectOutputStream(merchantSocket.getOutputStream());
+        is = new ObjectInputStream(merchantSocket.getInputStream());
+        os.writeObject(Bank_certificate);
 
         //  os.close();
         //is.close();
@@ -68,20 +61,166 @@ public class Bank {
         // BankServer.close();
     }
 
+    public void connectToMerchant() throws IOException, ClassNotFoundException, IllegalBlockSizeException, BadPaddingException {
+
+//        merchantSocket = new Socket("127.0.0.1", 9999);
+//        os = new ObjectOutputStream(merchantSocket.getOutputStream());
+//        is = new ObjectInputStream(merchantSocket.getInputStream());
+
+        RequestMessage inMsg = new RequestMessage();
+        inMsg.clearvariables();
+        inMsg = (RequestMessage) is.readObject();
+        if (inMsg.InitStringMessage.contains("Authorization Request")) {
+            try {
+                recieveAuthorizationRequest();
+            } catch (InvalidKeyException ex) {
+                Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
+            }
+
+        }
+    }
+
+    //Cipher1
+    //Revices merchant certificate
+    //decrypts merchant information using banks private key 
+    //unwraps session key1, decrypts encryptes information
+    //Cipher2
+    //decrypts customer information using banks private key
+    //unwraps session key2 by customer
+    //decrypts2 encrypted information by encryots2 
+    public void recieveAuthorizationRequest() throws InvalidKeyException, IOException, ClassNotFoundException, IllegalBlockSizeException, BadPaddingException {
+
+        Merchant_certificate = authorizationmessage.certificates.get(0);
+
+        Cipher deCipher1;
+        Cipher deCipher2;
+        try {
+            deCipher1 = Cipher.getInstance("RSA");
+            deCipher1.init(Cipher.DECRYPT_MODE, kpair.getPrivateKey());
+            byte[] wrappedsessionkey2 = new byte[256];
+
+            is.read(wrappedsessionkey2);
+            SecretKey sessionKey2 = (SecretKey) deCipher1.unwrap(wrappedsessionkey2, "AES", Cipher.SECRET_KEY);
+
+            byte[] encrpyted = new byte[256];
+            is.read(encrpyted);
+
+            deCipher1.init(Cipher.DECRYPT_MODE, sessionKey2);
+            byte[] decrypted = deCipher1.doFinal(encrpyted);             //recieves decryptes information from client
+
+            deCipher2 = Cipher.getInstance("RSA");
+            deCipher2.init(Cipher.DECRYPT_MODE, kpair.getPrivateKey());
+            byte[] wrappedsessionkey1 = new byte[256];
+
+            is.read(wrappedsessionkey1);
+            SecretKey sessionKey1 = (SecretKey) deCipher1.unwrap(wrappedsessionkey1, "AES", Cipher.SECRET_KEY);
+
+            byte[] encrpyted2 = new byte[256];
+            is.read(encrpyted);
+
+            deCipher1.init(Cipher.DECRYPT_MODE, sessionKey2);
+            byte[] decrypted2 = deCipher1.doFinal(encrpyted2);          //recieves decryptes Payment Information from customer
+
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (NoSuchPaddingException ex) {
+            Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
+        }
+
+    }
+
+    //Sends string response "Valid" 
+    //Wraps the reponse in with generated session key 
+    //Encryptes session key using merchants publickey
+    //Attaches request message to the  writeObject via Outstream object
+    public void sendAuthorizationResponse() throws NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, IOException {
+        authorizationResponseMessage.InitStringMessage.add("Valid");
+
+        KeyGenerator kgen = KeyGenerator.getInstance("AES", "BC");
+        kgen.init(256);
+        SecretKey sessionkey3 = kgen.generateKey();
+
+        Cipher deCipher3;
+        deCipher3 = Cipher.getInstance("RSA");
+
+        //encrypt using session key
+        deCipher3.init(Cipher.ENCRYPT_MODE, sessionkey3);
+        byte[] encrpyted1 = deCipher3.update(authorizationResponseMessage.InitStringMessage.get(0).getBytes());
+
+        deCipher3.init(Cipher.WRAP_MODE, Merchant_certificate.getPublicKey());
+        byte[] wrappedsessionkey3 = deCipher3.wrap(sessionkey3);
+        authorizationResponseMessage.encrypteddata.add(encrpyted1);
+        authorizationResponseMessage.encrypteddata.add(wrappedsessionkey3);
+
+        authorizationResponseMessage.certificates.add(bankcertificate);
+
+        os.writeObject(authorizationResponseMessage);                                    //sends authorization response to merchant with String message Valid 
+    }
+
+    public void recievepayementCaptureRequest() throws InvalidKeyException, IOException, IllegalBlockSizeException, BadPaddingException {
+
+        //byte[] auth_msg = authorizationmessage.encrypteddata.get(1);
+        Cipher deCipher5;
+        try {
+            deCipher5 = Cipher.getInstance("RSA");
+            deCipher5.init(Cipher.DECRYPT_MODE, kpair.getPrivateKey());
+            byte[] wrappedsessionkey4 = new byte[256];
+
+            is.read(wrappedsessionkey4);
+            SecretKey sessionKey4 = (SecretKey) deCipher5.unwrap(wrappedsessionkey4, "AES", Cipher.SECRET_KEY);
+
+            byte[] encrpyted3 = new byte[256];
+            is.read(encrpyted3);
+
+            deCipher5.init(Cipher.DECRYPT_MODE, sessionKey4);
+            byte[] decrypted3 = deCipher5.doFinal(encrpyted3);
+
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (NoSuchPaddingException ex) {
+            Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
+        }
+
+    }
+//    
+
+    public void sendpaymentCaptureResponse() throws NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, IOException {
+        paymentResponseMessage.InitStringMessage.add("Payment Response");
+
+        KeyGenerator kgen = KeyGenerator.getInstance("AES", "BC");
+        kgen.init(256);
+        SecretKey sessionkey5 = kgen.generateKey();
+
+        Cipher deCipher6;
+        deCipher6 = Cipher.getInstance("RSA");
+
+        //encrypt using session key
+        deCipher6.init(Cipher.ENCRYPT_MODE, sessionkey5);
+        byte[] encrpyted4 = deCipher6.update(paymentResponseMessage.InitStringMessage.get(0).getBytes());
+
+        deCipher6.init(Cipher.WRAP_MODE, Merchant_certificate.getPublicKey());
+        byte[] wrappedsessionkey5 = deCipher6.wrap(sessionkey5);
+        paymentResponseMessage.encrypteddata.add(encrpyted4);
+        paymentResponseMessage.encrypteddata.add(wrappedsessionkey5);
+
+        paymentResponseMessage.certificates.add(bankcertificate);
+
+        os.writeObject(paymentResponseMessage);
+    }
+
     public static X509Certificate createcertificate(CertAndKeyGen kgen) {
         X509Certificate certificate = null;
         try {
             //Generate self signed certificate
             certificate = kgen.getSelfCertificate(new X500Name("CN=ROOT"), (long) 365 * 24 * 3600);
-            System.out.println("Certificate : " + certificate.toString());
+            //System.out.println("Certificate : " + certificate.toString());
         } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidKeyException | IOException | CertificateException | SignatureException ex) {
             ex.printStackTrace();
         }
         return certificate;
     }
 
-    public static CertAndKeyGen generateKeypair() {
-        CertAndKeyGen kpair = null;
+    public CertAndKeyGen generateKeypair() {
         try {
             kpair = new CertAndKeyGen("RSA", "SHA1WithRSA", null);
             kpair.generate(1024);
@@ -91,176 +230,37 @@ public class Bank {
         return kpair;
     }
 
-//    public static void openMessage(String PRkey, File inputFile, File outputFile)
-//    {
-//         Key key =
-//         cipherin.init(Cipher.DECRYPT_MODE, myPR);
-//            ib= Toread.readUTF();
-//            bytes=decoder.decodeBuffer(ib);
-//            System.out.println("");
-//            System.out.println("The cipher text of Message 1 received from A: "+bytes);
-//            byte [] cipherText = cipherin.doFinal(bytes);
-//            System.out.println("The clear text of Message 1 received from A: "+new String(cipherText));
-//            int old_or= new String(cipherText).indexOf("||");
-//            String hisNonce=new String(cipherText).substring(0,old_or);
-//         
-//        
-//        // variable referencing the encrypted messsage
-//        // varibale referncing the message with ecnryotion method to open the encrypted message
-//        // storing the amount information referencing a variable 
-//        // variable referencing the message with encryption method to open the encrypted messahe bycustomer
-//        // storing the aaccout information referencing a variable
-//        // comparing amount and account wiht instance from array list 
-//        // if amount is less than balance than valid otherwise non valid 
-//       
-//        
-//        
-//    }
-    public static void authRequest() throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IOException, IllegalBlockSizeException, BadPaddingException {
-        BASE64Decoder decoder = new BASE64Decoder();
-        Socket bSocket = null;
-        DataInputStream Toread = new DataInputStream(bSocket.getInputStream());
-
-        Cipher cipherin = Cipher.getInstance("RSA");
-        Cipher testcipher = Cipher.getInstance("RSA");
-        String ib;
-
-        cipherin.init(Cipher.DECRYPT_MODE, myPR);   //Initializes this cipher with a key.
-        ib = Toread.readUTF();                //reads binary value
-        bytes = decoder.decodeBuffer(ib);      //decodes value in character form
-        System.out.println("");
-        System.out.println("The cipher text of Message 1 received from Merchant: " + bytes);
-        byte[] cipherText = cipherin.doFinal(bytes); //Finishes a multiple-part encryption or decryption operation, depending on how this cipher was initialized
-        System.out.println("The clear text of Message 1 received from Merchant: " + new String(cipherText));
-
-        //  int old_or= new String(cipherText).indexOf("||");
-    }
-
-    public static void authResponse() throws InvalidKeyException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, IOException {
-        String ob = null;
-        Socket aSocket = null;
-        Cipher cipherout = Cipher.getInstance("RSA");
-        DataOutputStream Towr = new DataOutputStream(aSocket.getOutputStream());
-        BASE64Encoder encoder = new BASE64Encoder();
-        System.out.println("The clear text of Message 2 sent to Merchant: " + ob);
-        cipherout.init(Cipher.ENCRYPT_MODE, merPU); //encrypting usingmerchants public key
-        byte[] cipherText = cipherout.doFinal(ob.getBytes());  //converting to ciphertext
-        Towr.writeUTF(encoder.encode(cipherText)); //writing encoded cipher text to the socket
-        System.out.println("The cipher text of Message 2 sent to Merchant: " + cipherText);
-    }
-
-//    public static void sendMessage()
-//    {
-//       System.out.println("The clear text of Message 2 sent to A: "+ob);
-//            cipherout.init(Cipher.ENCRYPT_MODE, hisPU);
-//            cipherText = cipherout.doFinal(ob.getBytes());
-//            writer.writeUTF(encoder.encode(cipherText));
-//            System.out.println("The cipher text of Message 2 sent to A: "+cipherText);
-//        //variable referencing recived message
-//        //using banks private key to decrypt
-//        //using session keyto decrypt message from merchant and storing in variable
-//        // comapring amount information with customers current balance
-//        
+//    public void decryptingpaymentfromcustomer() throws IOException, ClassNotFoundException {;;;
+//        RequestMessage purchasemessage = new RequestMessage();
+//        //Recieve the object
+//        purchasemessage = (RequestMessage) is.readObject();
+//        SealedObject s_payment = purchasemessage.sealedobject.get(0);
+//        try {
+//            //Decrypt the session key using own private key
+//            Cipher desCipher2 = Cipher.getInstance("RSA");
+//            Key sessionkey;
+//            desCipher2.init(Cipher.UNWRAP_MODE, kpair.getPrivateKey());
+//            sessionkey = desCipher2.unwrap(purchasemessage.encrypteddata.get(1), "AES", Cipher.SECRET_KEY);
+//
+//            // Decrypting the payment object using the unwrapped session key
+//            Cipher desCipher = Cipher.getInstance("AES");
+//            desCipher.init(Cipher.DECRYPT_MODE, sessionkey);
+//            p = (Payment) s_payment.getObject(desCipher);
+//            System.out.println(p.getFname() + p.getLname() + p.getAddress() + p.getCredicardnumber());
+//            checkCustomerAccountability();
+//        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException | BadPaddingException ex) {
+//            Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
+//        }
+//
 //    }
     public static void main(String args[]) throws IOException, ClassNotFoundException {
-//Creating certificate and keypair. You can use keypair to get public and private key
 
-        List<Customerr> custList = new ArrayList<Customerr>();
-        Customerr customer1 = new Customerr();
-        customer1.setAccountNum(123);
-        customer1.setBalance(500);
-        customer1.setName("Kali");
-
-        List<Merchantt> merchList = new ArrayList<Merchantt>();
-        Merchantt merchant1 = new Merchantt();
-        merchant1.setmAccountNum(123);
-        merchant1.setmBalance(500);
-        merchant1.setmName("Eva Corp");
-
-        //  Cipher cipher = Cipher.getInstance("AES"); //creates a Cipher instance using the encryption algorithm called AES
-        //cipher = Cipher.getInstance("AES/CBC/PKCS5Padding"); // instantiating a cipher you can append its mode to the name of the encryption algorithm. For instance, to create an AES Cipher instance using Cipher Block Chaining (CBC) 
-        CertAndKeyGen keypair = generateKeypair();
-        X509Certificate Bank_certificate = createcertificate(keypair);
         try {
-            openbankserver();
+            Bank a = new Bank();
+            a.openbankserver();
         } catch (IOException e) {
             System.out.println(e);
         }
-
     }
 
-    class Customerr {
-
-        private String Name;
-        private int AccountNum;
-        private int Balance;
-
-        public String getName() {
-            return this.Name;
-        }
-
-        public int getAccountNum() {
-            return this.AccountNum;
-        }
-
-        public boolean setName(String name) {
-            this.Name = name;
-            return true;
-        }
-
-        public boolean setAccountNum(int accountNum) {
-            this.AccountNum = accountNum;
-            return true;
-        }
-
-        public int getBalance() {
-            return this.Balance;
-        }
-
-        public boolean setBalance(int balance) {
-            this.Balance = balance;
-            return true;
-        }
-    }
-
-    class Merchantt {
-
-        private String mName;
-        private int mAccountNum;
-        private int mBalance;
-
-        public int getmAccountNum() {
-            return this.mAccountNum;
-        }
-
-        public boolean setmAccountNum(int maccountNum) {
-            this.mAccountNum = maccountNum;
-            return true;
-        }
-
-        public boolean setmName(String mname) {
-            this.mName = mname;
-            return true;
-        }
-
-        public String getmName() {
-            return this.mName;
-        }
-
-        public int getmBalance() {
-            return this.mBalance;
-        }
-
-        public boolean setmBalance(int mbalance) {
-            this.mBalance = mbalance;
-            return true;
-        }
-
-    }
-
-//You create a symmetric key much as you create a key pair. You use a factory method from the KeyGenerator 
-//class and pass in the algorithm as a String. When you call the generateKey() method, you get back an object 
-//that implements the Key interface instead of the KeyPair interface.
-//SecretKey key =
-//     KeyGenerator.getInstance("DES").generateKey();
-
+}

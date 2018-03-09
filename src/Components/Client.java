@@ -72,6 +72,7 @@ public class Client {
             Merchant_certificate = init.certificates.get(0);
             Bank_certificate = init.certificates.get(1);
             System.out.println("Order created with transaction id: " + order.getTransaction_id());
+            purchaserequest();
         } catch (IOException | ClassNotFoundException ex) {
             Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -81,16 +82,20 @@ public class Client {
     public void purchaserequest() {
         purchaserequest.clearvariables();
         // Creates dual signature and pass the dual signature in index 0 of encrypteddata
-        dualsignature(); 
+        dualsignature();
         // Creates the encrypted payment for bank
-        // Sealed Payment Object in the first index of sealed object
+        // Sealed Payment Object in the first index of sealedobject
         // Wrapped session key with bank public key in the index 1 of encrypted data
-        encryptpaymentinfo(); 
-        //Index 2 and 3 will have orderdigest and paymentdigest
+        encryptpaymentinfo();
+        // Encrypting the order object and putting into second index of sealedobject
+        // Wrapped session key with merchant public key in the index 2 of encrypted data
+        encryptorderinfo();
+        //Index 2 and 3 of encrypteddata will have orderdigest and paymentdigest
         purchaserequest.encrypteddata.add(orderdigest);
         purchaserequest.encrypteddata.add(paymentdigest);
-        //Passing the clinet certificate in first index
+        //Passing the client certificate in first index
         purchaserequest.certificates.add(Client_certificate);
+        purchaserequest.InitStringMessage.add("Purchase Request");
         try {
             os.writeObject(purchaserequest);
         } catch (IOException ex) {
@@ -120,21 +125,46 @@ public class Client {
     public void encryptpaymentinfo() {
         try {
             //generate sessionkey
-            KeyGenerator kgen = KeyGenerator.getInstance("AES", "BC");
-            kgen.init(256);
+            KeyGenerator kgen = KeyGenerator.getInstance("AES");
+            kgen.init(128);
             SecretKey sessionkey = kgen.generateKey();
-            Cipher desCipher;
-            desCipher = Cipher.getInstance("RSA");
 
             //encrypt using session key
+            Cipher desCipher;
+            desCipher = Cipher.getInstance("AES");
             desCipher.init(Cipher.ENCRYPT_MODE, sessionkey);
             SealedObject sealedpayment = new SealedObject(creditcardinfo, desCipher);
             purchaserequest.sealedobject.add(sealedpayment);
 
-            desCipher.init(Cipher.WRAP_MODE, Bank_certificate.getPublicKey());
-            byte[] wrappedsessionkey = desCipher.wrap(sessionkey);
+            Cipher desCipher2;
+            desCipher2 = Cipher.getInstance("RSA");
+            desCipher2.init(Cipher.WRAP_MODE, Bank_certificate.getPublicKey());
+            byte[] wrappedsessionkey = desCipher2.wrap(sessionkey);
             purchaserequest.encrypteddata.add(wrappedsessionkey);
-        } catch (NoSuchAlgorithmException | NoSuchProviderException | NoSuchPaddingException | IllegalBlockSizeException | IOException | InvalidKeyException ex) {
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | IllegalBlockSizeException | IOException | InvalidKeyException ex) {
+            Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    public void encryptorderinfo() {
+        try {
+            KeyGenerator kgen = KeyGenerator.getInstance("AES");
+            kgen.init(128);
+            SecretKey sessionkey = kgen.generateKey();
+
+            //encrypt using session key
+            Cipher desCipher;
+            desCipher = Cipher.getInstance("AES");
+            desCipher.init(Cipher.ENCRYPT_MODE, sessionkey);
+            SealedObject sealedorder = new SealedObject(order, desCipher);
+            purchaserequest.sealedobject.add(sealedorder);
+
+            Cipher desCipher2;
+            desCipher2 = Cipher.getInstance("RSA");
+            desCipher2.init(Cipher.WRAP_MODE, Merchant_certificate.getPublicKey());
+            byte[] wrappedsessionkey = desCipher2.wrap(sessionkey);
+            purchaserequest.encrypteddata.add(wrappedsessionkey);
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IOException | IllegalBlockSizeException ex) {
             Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
@@ -189,7 +219,7 @@ public class Client {
         CertAndKeyGen kpair = null;
         try {
             kpair = new CertAndKeyGen("RSA", "SHA1WithRSA", null);
-            kpair.generate(1024);
+            kpair.generate(2048);
         } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidKeyException ex) {
             Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
         }

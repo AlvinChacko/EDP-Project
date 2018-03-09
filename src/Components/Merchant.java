@@ -15,11 +15,14 @@ package Components;
  * and open the template in the editor.
  */
 import java.io.*;
+import OrderInfo.Order;
+import OrderInfo.Payment;
 import java.io.IOException;
 import static java.lang.Math.random;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.InvalidKeyException;
+import java.security.Key;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.Signature;
@@ -34,6 +37,7 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SealedObject;
 import javax.crypto.SecretKey;
 import sun.security.tools.keytool.CertAndKeyGen;
 import sun.security.x509.X500Name;
@@ -65,6 +69,10 @@ public class Merchant {
 
     static RequestMessage message = new RequestMessage(); //Request Message that needs to be sent around
 
+    static RequestMessage purchasemessage = new RequestMessage();
+    
+    static Order order;
+
     public static void openclientserver() throws IOException, ClassNotFoundException {
         MerchantServer = new ServerSocket(9999);
         clientSocket = MerchantServer.accept();
@@ -75,9 +83,10 @@ public class Merchant {
         initmessage.clearvariables();
         initmessage = (RequestMessage) c_is.readObject();
         if (initmessage.InitStringMessage.contains("Initiate")) {
-//            connecttobank();
+            connecttobank();
             initiateresponse();
-            if (c_is.readUTF().equals("Purchase Request")) {
+            purchasemessage = (RequestMessage) c_is.readObject();
+            if (purchasemessage.InitStringMessage.contains("Purchase Request")) {
                 purchaserequestprocessing();
             }
         }
@@ -96,18 +105,30 @@ public class Merchant {
     }
 
     public static void purchaserequestprocessing() throws IOException, ClassNotFoundException {
-        RequestMessage purchasemessage = new RequestMessage();
-        //MIGHT HAVE TO READ MORE THINGS HERE
-        purchasemessage = (RequestMessage) c_is.readObject();
         customercertificate = purchasemessage.certificates.get(0);
+        SealedObject s_order = purchasemessage.sealedobject.get(1);
+        // Decrypting the order object using own private key
+        try {
+            Cipher desCipher2 = Cipher.getInstance("RSA");
+            Key sessionkey;
+            desCipher2.init(Cipher.UNWRAP_MODE, keypair.getPrivateKey());
+            sessionkey = desCipher2.unwrap(purchasemessage.encrypteddata.get(2), "AES", Cipher.SECRET_KEY);
 
+            // Decrypting the payment object using the unwrapped session key
+            Cipher desCipher = Cipher.getInstance("AES");
+            desCipher.init(Cipher.DECRYPT_MODE, sessionkey);
+            order = (Order) s_order.getObject(desCipher);
+            System.out.println("Recieved the order from client: " + order.getTransaction_id());
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException | BadPaddingException ex) {
+            Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
+        }
         ///CHECK IF DUAL SIGNATURE IS CORRECT
         //send purchase response 
         c_os.writeUTF("Purchase Processing Completed");
     }
 
     // Used to verify the digital signature, params are data to be checked and the signature
-    public boolean verifySignature(byte[] data, byte[] signature, String keyFile) throws Exception {
+    public boolean verifySignature(byte[] data, byte[] signature) throws Exception {
         Signature sig = Signature.getInstance("SHA1withRSA");
         sig.initVerify(customercertificate.getPublicKey());
         sig.update(data);
@@ -249,7 +270,7 @@ public class Merchant {
         CertAndKeyGen kpair = null;
         try {
             kpair = new CertAndKeyGen("RSA", "SHA1WithRSA", null);
-            kpair.generate(1024);
+            kpair.generate(2048);
         } catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidKeyException ex) {
             Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
         }
