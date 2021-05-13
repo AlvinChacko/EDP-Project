@@ -5,6 +5,7 @@
  */
 package OrderInfo;
 
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 
 /**
@@ -13,8 +14,8 @@ import java.util.ArrayList;
  */
 public class Order implements java.io.Serializable{
     private String transaction_id;
-    private double tax, total;
-    private int subtotal;
+    private double tax=0, total=0;
+    private double subtotal=0;
     private ArrayList <String> products = new ArrayList<>();
     private String Orderstatus, paymentstatus;
 
@@ -32,6 +33,10 @@ public class Order implements java.io.Serializable{
     public void setTransaction_id(String transaction_id) {
         this.transaction_id = transaction_id;
     }
+    
+    public void setproducts(ArrayList prod) {
+        this.products = prod;
+    }
 
     public double calculateTotal() {
         calculateTax();
@@ -44,11 +49,18 @@ public class Order implements java.io.Serializable{
     }
     
 
-    public int getSubtotal() {
+    public double getSubtotal() {
         return subtotal;
     }
+    public double getTax() {
+        return tax;
+    }
+    
+    public double getTotal() {
+        return total;
+    }
 
-    public void setSubtotal(int subtotal) {
+    public void setSubtotal(double subtotal) {
         this.subtotal = subtotal;
     }
 

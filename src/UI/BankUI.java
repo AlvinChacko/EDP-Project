@@ -5,11 +5,13 @@
  */
 package UI;
 
+import Components.Bank;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -19,11 +21,15 @@ import java.util.logging.Logger;
  */
 public class BankUI extends javax.swing.JFrame {
 
+    static Bank bank;
+    static boolean server_thrad_created = false;
+
     /**
      * Creates new form BankUI
      */
     public BankUI() {
         initComponents();
+        bank = new Bank(logging);
     }
 
     /**
@@ -35,54 +41,168 @@ public class BankUI extends javax.swing.JFrame {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        jScrollPane1 = new javax.swing.JScrollPane();
-        Info = new javax.swing.JTextArea();
-        jLabel1 = new javax.swing.JLabel();
-        jLabel2 = new javax.swing.JLabel();
+        init = new javax.swing.JPanel();
+        jPanel5 = new javax.swing.JPanel();
+        jLabel28 = new javax.swing.JLabel();
+        jLabel30 = new javax.swing.JLabel();
+        merchant = new javax.swing.JPanel();
+        jLabel31 = new javax.swing.JLabel();
+        jLabel32 = new javax.swing.JLabel();
+        jScrollPane2 = new javax.swing.JScrollPane();
+        logging = new javax.swing.JTextArea();
+        jLabel34 = new javax.swing.JLabel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
-        Info.setEditable(false);
-        Info.setColumns(20);
-        Info.setRows(5);
-        jScrollPane1.setViewportView(Info);
+        init.setBackground(new java.awt.Color(255, 255, 255));
+        init.setAutoscrolls(true);
+        init.setPreferredSize(new java.awt.Dimension(500, 500));
 
-        jLabel1.setText("Logging");
+        jPanel5.setBackground(new java.awt.Color(0, 153, 153));
+        jPanel5.setFont(new java.awt.Font("Intro ", 0, 24)); // NOI18N
 
-        jLabel2.setFont(new java.awt.Font("Tahoma", 0, 36)); // NOI18N
-        jLabel2.setText("Bank");
+        jLabel28.setFont(new java.awt.Font("Intro ", 0, 24)); // NOI18N
+        jLabel28.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel28.setIcon(new javax.swing.ImageIcon(getClass().getResource("/UI/images/logo.png"))); // NOI18N
+        jLabel28.setText("BAnk System");
+
+        jLabel30.setIcon(new javax.swing.ImageIcon(getClass().getResource("/UI/images/banklogo.png"))); // NOI18N
+
+        javax.swing.GroupLayout jPanel5Layout = new javax.swing.GroupLayout(jPanel5);
+        jPanel5.setLayout(jPanel5Layout);
+        jPanel5Layout.setHorizontalGroup(
+            jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel5Layout.createSequentialGroup()
+                .addGap(45, 45, 45)
+                .addComponent(jLabel28, javax.swing.GroupLayout.PREFERRED_SIZE, 325, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 265, Short.MAX_VALUE)
+                .addComponent(jLabel30)
+                .addGap(22, 22, 22))
+        );
+        jPanel5Layout.setVerticalGroup(
+            jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jLabel28, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addGroup(jPanel5Layout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jLabel30, javax.swing.GroupLayout.PREFERRED_SIZE, 60, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+        );
+
+        merchant.setBackground(new java.awt.Color(241, 250, 238));
+        merchant.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                bankopenserver(evt);
+            }
+        });
+
+        jLabel31.setFont(new java.awt.Font("Nexa Bold", 0, 14)); // NOI18N
+        jLabel31.setForeground(new java.awt.Color(69, 123, 157));
+        jLabel31.setText("Start Server");
+
+        jLabel32.setIcon(new javax.swing.ImageIcon(getClass().getResource("/UI/images/bank.png"))); // NOI18N
+
+        javax.swing.GroupLayout merchantLayout = new javax.swing.GroupLayout(merchant);
+        merchant.setLayout(merchantLayout);
+        merchantLayout.setHorizontalGroup(
+            merchantLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(merchantLayout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jLabel31)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, merchantLayout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jLabel32)
+                .addContainerGap())
+        );
+        merchantLayout.setVerticalGroup(
+            merchantLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(merchantLayout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jLabel32, javax.swing.GroupLayout.PREFERRED_SIZE, 60, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(9, 9, 9)
+                .addComponent(jLabel31)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+        );
+
+        logging.setEditable(false);
+        logging.setColumns(20);
+        logging.setFont(new java.awt.Font("Gill Sans MT", 0, 14)); // NOI18N
+        logging.setRows(5);
+        jScrollPane2.setViewportView(logging);
+
+        jLabel34.setFont(new java.awt.Font("Impact", 0, 24)); // NOI18N
+        jLabel34.setText("Logging");
+
+        javax.swing.GroupLayout initLayout = new javax.swing.GroupLayout(init);
+        init.setLayout(initLayout);
+        initLayout.setHorizontalGroup(
+            initLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jPanel5, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addGroup(initLayout.createSequentialGroup()
+                .addContainerGap()
+                .addGroup(initLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(initLayout.createSequentialGroup()
+                        .addComponent(jScrollPane2)
+                        .addContainerGap())
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, initLayout.createSequentialGroup()
+                        .addGap(0, 0, Short.MAX_VALUE)
+                        .addComponent(jLabel34)
+                        .addGap(337, 337, 337))))
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, initLayout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(merchant, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(321, 321, 321))
+        );
+        initLayout.setVerticalGroup(
+            initLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(initLayout.createSequentialGroup()
+                .addComponent(jPanel5, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(34, 34, 34)
+                .addComponent(merchant, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(18, 18, 18)
+                .addComponent(jLabel34)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 240, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(22, Short.MAX_VALUE))
+        );
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(layout.createSequentialGroup()
-                        .addGap(175, 175, 175)
-                        .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 48, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addGroup(layout.createSequentialGroup()
-                        .addGap(117, 117, 117)
-                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addGroup(layout.createSequentialGroup()
-                        .addGap(157, 157, 157)
-                        .addComponent(jLabel2)))
-                .addContainerGap(117, Short.MAX_VALUE))
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
+                .addGap(0, 0, Short.MAX_VALUE)
+                .addComponent(init, javax.swing.GroupLayout.PREFERRED_SIZE, 757, javax.swing.GroupLayout.PREFERRED_SIZE))
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addGap(30, 30, 30)
-                .addComponent(jLabel2)
-                .addGap(114, 114, 114)
-                .addComponent(jLabel1)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+            .addComponent(init, javax.swing.GroupLayout.DEFAULT_SIZE, 544, Short.MAX_VALUE)
         );
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
+
+    private void bankopenserver(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_bankopenserver
+        if (server_thrad_created == false) {
+            server_thrad_created = true;
+            Executors.newSingleThreadExecutor().execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        logging.append("Starting server.................\n");
+                        bank.openbankserver();
+                        //bank.inittoMerchant();
+                    } catch (Exception ex) {
+                        Logger.getLogger(ClientUI.class.getName()).log(Level.SEVERE, null, ex);
+                        logging.append("An Error has occured. Please try again!\n");
+                    }
+                }
+            });
+        }
+        else{
+            logging.append("Server thread instance already running\n");
+        }
+    }//GEN-LAST:event_bankopenserver
 
     /**
      * @param args the command line arguments
@@ -110,33 +230,24 @@ public class BankUI extends javax.swing.JFrame {
             java.util.logging.Logger.getLogger(BankUI.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
         }
         //</editor-fold>
-        ServerSocket BankServer = null;
-        Socket BankSocket = null;
         /* Create and display the form */
         java.awt.EventQueue.invokeLater(new Runnable() {
             public void run() {
                 new BankUI().setVisible(true);
             }
         });
-        try {
-            BankServer = new ServerSocket(1000);
-            BankSocket = BankServer.accept();
-            DataOutputStream os = new DataOutputStream(BankSocket.getOutputStream());
-            DataInputStream is = new DataInputStream(BankSocket.getInputStream());
-            Info.setText(is.readUTF());
-            os.close();
-            is.close();
-            BankSocket.close();
-            BankServer.close();
-        } catch (IOException ex) {
-            Logger.getLogger(BankUI.class.getName()).log(Level.SEVERE, null, ex);
-        }
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private static javax.swing.JTextArea Info;
-    private javax.swing.JLabel jLabel1;
-    private javax.swing.JLabel jLabel2;
-    private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JPanel init;
+    private javax.swing.JLabel jLabel28;
+    private javax.swing.JLabel jLabel30;
+    private javax.swing.JLabel jLabel31;
+    private javax.swing.JLabel jLabel32;
+    private javax.swing.JLabel jLabel34;
+    private javax.swing.JPanel jPanel5;
+    private javax.swing.JScrollPane jScrollPane2;
+    private javax.swing.JTextArea logging;
+    private javax.swing.JPanel merchant;
     // End of variables declaration//GEN-END:variables
 }

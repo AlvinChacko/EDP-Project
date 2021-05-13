@@ -26,6 +26,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SealedObject;
 import javax.crypto.SecretKey;
+import javax.swing.JTextArea;
 import sun.security.tools.keytool.CertAndKeyGen;
 import sun.security.x509.X500Name;
 
@@ -35,6 +36,7 @@ import sun.security.x509.X500Name;
  */
 public class Client {
 
+    JTextArea logging;
     Socket merchant = null;
     ObjectOutputStream os;
     ObjectInputStream is;
@@ -45,59 +47,79 @@ public class Client {
     X509Certificate Merchant_certificate;
     X509Certificate Bank_certificate;
     Order order;
-    Payment creditcardinfo = new Payment("5354545421222", "Alvin", "Chacko", "20 Jane street");
+    Payment creditcardinfo;
     byte[] orderdigest;
     byte[] paymentdigest;
     byte[] combinedMD;
     byte[] dualsignature;
     RequestMessage init = new RequestMessage();
     RequestMessage purchaserequest = new RequestMessage();
+    Boolean server_connected = false;
+
+    public Client(JTextArea textarea) {
+        this.logging = textarea;
+    }
 
     public void connecttomerchant() throws IOException {
         merchant = new Socket("127.0.0.1", 9999);
         os = new ObjectOutputStream(merchant.getOutputStream());
         is = new ObjectInputStream(merchant.getInputStream());
-        initiatetomerchant();
+        server_connected = true;
+        System.out.println("Merchant Connected");
     }
 
-    public void initiatetomerchant() {
+    public Order initiatetomerchant(String todo) {
         try {
-            init.clearvariables();
-            init.getInitStringMessage().add("Initiate");
-            os.writeObject(init);
-            init = (RequestMessage) is.readObject();
+            if (todo.contains("Check Balance")) {
+                os.writeUTF(todo);
+                os.flush();
+                logging.append("Your Bank Balance is: ");
+                logging.append(""+is.readDouble()+"\n");
+            } else {
+                os.writeUTF(" ");
+                init.clearvariables();
+                init.getInitStringMessage().add("Initiate");
+                os.writeObject(init);
+                init = (RequestMessage) is.readObject();
 
-            //Initialize the correct variable from the recieved message
-            order = new Order(init.InitStringMessage.get(0));
-            Merchant_certificate = init.certificates.get(0);
-            Bank_certificate = init.certificates.get(1);
-            System.out.println("Order created with transaction id: " + order.getTransaction_id());
-            purchaserequest();
+                //Initialize the correct variable from the recieved message
+                order = new Order(init.InitStringMessage.get(0));
+                Merchant_certificate = init.certificates.get(0);
+                Bank_certificate = init.certificates.get(1);
+                System.out.println("Order created with transaction id: " + order.getTransaction_id());
+            }
         } catch (IOException | ClassNotFoundException ex) {
             Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
         }
+        return order;
     }
 
     // Creating the purchase message to send to merchant
-    public void purchaserequest() {
+    public void purchaserequest(Payment p) {
+        this.creditcardinfo = p;
         purchaserequest.clearvariables();
         // Creates dual signature and pass the dual signature in index 0 of encrypteddata
         dualsignature();
         // Creates the encrypted payment for bank
-        // Sealed Payment Object in the first index of sealedobject
+        // Sealed Payment Object in the index 0 of sealedobject
         // Wrapped session key with bank public key in the index 1 of encrypted data
         encryptpaymentinfo();
-        // Encrypting the order object and putting into second index of sealedobject
+        // Encrypting the order object and putting into index 1 of sealedobject
         // Wrapped session key with merchant public key in the index 2 of encrypted data
         encryptorderinfo();
-        //Index 2 and 3 of encrypteddata will have orderdigest and paymentdigest
+        //Index 3 and 4 of encrypteddata will have orderdigest and paymentdigest
         purchaserequest.encrypteddata.add(orderdigest);
         purchaserequest.encrypteddata.add(paymentdigest);
+//        StringBuffer hexString = new StringBuffer();
+//        for (int i = 0; i < dualsignature.length; i++) {
+//            hexString.append(Integer.toHexString(0xFF & dualsignature[i]));
+//        }
         //Passing the client certificate in first index
         purchaserequest.certificates.add(Client_certificate);
         purchaserequest.InitStringMessage.add("Purchase Request");
         try {
             os.writeObject(purchaserequest);
+            System.out.println(is.readUTF());
         } catch (IOException ex) {
             Logger.getLogger(Client.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -197,12 +219,6 @@ public class Client {
         }
     }
 
-    public void closeconnection() throws IOException {
-        os.close();
-        is.close();
-        merchant.close();
-    }
-
     public X509Certificate createcertificate(CertAndKeyGen kgen) {
         X509Certificate certificate = null;
         try {
@@ -226,13 +242,12 @@ public class Client {
         return kpair;
     }
 
-    public static void main(String args[]) throws IOException, ClassNotFoundException {
-        Client Alvin = new Client();
-        try {
-            Alvin.connecttomerchant();
-        } catch (IOException e) {
-            System.out.println(e);
-        }
-
+    public void closeconnection() throws IOException {
+        os.writeUTF("Reset");
+        os.flush();
+        os.close();
+        is.close();
+        merchant.close();
+        server_connected = false;
     }
 }

@@ -11,60 +11,52 @@ package OrderInfo;
  */
 public class Payment implements java.io.Serializable{
     private String credicardnumber;
-    private int cvv;
-    private String Fname;
-    private String Lname;
+    private String type;
+    private String cvv;
+    private String name;
     private String address;
-    private int authorizeammount=0;
+    private double authorizeammount=0;
     private String expirydate;
     private String paymentstatus;
     
-    public Payment(String credicardnumber, String Fname, String Lname, String address) {
+    public Payment(String credicardnumber, String name, String address, String type, String cvv) {
         this.credicardnumber = credicardnumber;
-        this.Fname = Fname;
-        this.Lname = Lname;
+        this.name = name;
         this.address = address;
         paymentstatus = "Pending";
+        this.type = type;
+        this.cvv=cvv;
     }
 
     public void setCredicardnumber(String credicardnumber) {
         this.credicardnumber = credicardnumber;
     }
 
-    public void setCvv(int cvv) {
+    public void setCvv(String cvv) {
         this.cvv = cvv;
     }
 
 
-    public void setFname(String Fname) {
-        this.Fname = Fname;
+    public void setFname(String name) {
+        this.name = name;
     }
-
-    public void setLname(String Lname) {
-        this.Lname = Lname;
-    }
-
 
     public void setAddress(String address) {
         this.address = address;
     }
 
 
-    public int getAuthorizeammount() {
+    public double getAuthorizeammount() {
         return authorizeammount;
     }
 
 
-    public void setAuthorizeammount(int authorizeammount) {
+    public void setAuthorizeammount(double authorizeammount) {
         this.authorizeammount = authorizeammount;
     }
 
-    public String getFname() {
-        return Fname;
-    }
-
-    public String getLname() {
-        return Lname;
+    public String getname() {
+        return name;
     }
 
     public String getAddress() {

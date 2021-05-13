@@ -10,16 +10,19 @@
 package Components;
 
 import static Components.Merchant.bankcertificate;
+import OrderInfo.Payment;
 import java.io.*;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.InvalidKeyException;
+import java.security.Key;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.time.LocalTime;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.crypto.BadPaddingException;
@@ -29,7 +32,9 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SealedObject;
 import javax.crypto.SecretKey;
+import javax.swing.JTextArea;
 
 /**
  *
@@ -37,6 +42,7 @@ import javax.crypto.SecretKey;
  */
 public class Bank {
 
+    JTextArea logging;
     CertAndKeyGen kpair = generateKeypair();
     X509Certificate Bank_certificate = createcertificate(kpair);
     ServerSocket BankServer = null;
@@ -44,171 +50,230 @@ public class Bank {
     ObjectInputStream is;
     ObjectOutputStream os;
     X509Certificate Merchant_certificate;
+    X509Certificate Client_certificate;
     RequestMessage authorizationmessage = new RequestMessage();
-    static RequestMessage authorizationResponseMessage = new RequestMessage();
-    static RequestMessage paymentResponseMessage = new RequestMessage();
+    RequestMessage authorizationResponseMessage = new RequestMessage();
+    RequestMessage paymentauthorizationMessage = new RequestMessage();
+    RequestMessage paymentResponseMessage = new RequestMessage();
+    Payment p;
+    static boolean server_opened = false;
+    BankAccount[] accounts = new BankAccount[3];
+    BankAccount account1 = new BankAccount(1000, "Client");
+    BankAccount account2 = new BankAccount(2000, "Merchant");
+    LocalTime localTime;
 
-    public void openbankserver() throws IOException {
-        BankServer = new ServerSocket(1000);
-        merchantSocket = BankServer.accept();
-        os = new ObjectOutputStream(merchantSocket.getOutputStream());
-        is = new ObjectInputStream(merchantSocket.getInputStream());
-        os.writeObject(Bank_certificate);
-
-        //  os.close();
-        //is.close();
-        // BankSocket.close();
-        // BankServer.close();
+    public Bank(JTextArea textarea) {
+        this.logging = textarea;
+        accounts[0] = account1;
+        accounts[1] = account2;
     }
 
-    public void connectToMerchant() throws IOException, ClassNotFoundException, IllegalBlockSizeException, BadPaddingException {
+    public void openbankserver() throws Exception {
+        if (server_opened == false) {
+            BankServer = new ServerSocket(1000);
+            merchantSocket = BankServer.accept();
+            server_opened = true;
+            logging.append(localTime.now() + " Merchant Connected\n\n");
+            os = new ObjectOutputStream(merchantSocket.getOutputStream());
+            is = new ObjectInputStream(merchantSocket.getInputStream());
+            os.writeObject(Bank_certificate);
+            inittoMerchant();
+        } else {
+            logging.append(localTime.now() + " Merchant has already connected...\n");
+        }
 
-//        merchantSocket = new Socket("127.0.0.1", 9999);
-//        os = new ObjectOutputStream(merchantSocket.getOutputStream());
-//        is = new ObjectInputStream(merchantSocket.getInputStream());
+    }
 
-        RequestMessage inMsg = new RequestMessage();
-        inMsg.clearvariables();
-        inMsg = (RequestMessage) is.readObject();
-        if (inMsg.InitStringMessage.contains("Authorization Request")) {
+    public void inittoMerchant() throws Exception {
+        if (is.readUTF().contains("Check Balance")) {
             try {
-                recieveAuthorizationRequest();
-            } catch (InvalidKeyException ex) {
+                os.writeDouble(account1.getAccountAmount());
+                os.flush();
+                logging.append("Client Check Balance: " + account1.getAccountAmount() + "\n\n");
+                reset();
+            } catch (IOException ex) {
                 Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
             }
-
+        } else {
+            authorizationmessage.clearvariables();
+            authorizationmessage = (RequestMessage) is.readObject();
+            if (authorizationmessage.InitStringMessage.contains("Authorization Request")) {
+                try {
+                    processAuthorizationRequest();
+                } catch (Exception ex) {
+                    Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
+                }
+                processpayementCaptureRequest();
+            }
         }
     }
 
-    //Cipher1
-    //Revices merchant certificate
-    //decrypts merchant information using banks private key 
-    //unwraps session key1, decrypts encryptes information
-    //Cipher2
-    //decrypts customer information using banks private key
-    //unwraps session key2 by customer
-    //decrypts2 encrypted information by encryots2 
-    public void recieveAuthorizationRequest() throws InvalidKeyException, IOException, ClassNotFoundException, IllegalBlockSizeException, BadPaddingException {
+    public void processAuthorizationRequest() throws Exception {
+        logging.append(localTime.now() + " Start Authorization Request Details: \n");
+        Client_certificate = authorizationmessage.certificates.get(0);
+        Merchant_certificate = authorizationmessage.certificates.get(1);
 
-        Merchant_certificate = authorizationmessage.certificates.get(0);
-
-        Cipher deCipher1;
-        Cipher deCipher2;
         try {
-            deCipher1 = Cipher.getInstance("RSA");
-            deCipher1.init(Cipher.DECRYPT_MODE, kpair.getPrivateKey());
-            byte[] wrappedsessionkey2 = new byte[256];
+            Cipher deCipher1 = Cipher.getInstance("RSA");
+            logging.append(localTime.now() + " Unwrapping session key using own private key " + kpair.getPrivateKey().toString() + " to read the response. \nRecieved Response: " + authorizationmessage.encrypteddata.get(1) + "\n");
 
-            is.read(wrappedsessionkey2);
-            SecretKey sessionKey2 = (SecretKey) deCipher1.unwrap(wrappedsessionkey2, "AES", Cipher.SECRET_KEY);
-
-            byte[] encrpyted = new byte[256];
-            is.read(encrpyted);
-
-            deCipher1.init(Cipher.DECRYPT_MODE, sessionKey2);
-            byte[] decrypted = deCipher1.doFinal(encrpyted);             //recieves decryptes information from client
-
-            deCipher2 = Cipher.getInstance("RSA");
-            deCipher2.init(Cipher.DECRYPT_MODE, kpair.getPrivateKey());
-            byte[] wrappedsessionkey1 = new byte[256];
-
-            is.read(wrappedsessionkey1);
-            SecretKey sessionKey1 = (SecretKey) deCipher1.unwrap(wrappedsessionkey1, "AES", Cipher.SECRET_KEY);
-
-            byte[] encrpyted2 = new byte[256];
-            is.read(encrpyted);
-
-            deCipher1.init(Cipher.DECRYPT_MODE, sessionKey2);
-            byte[] decrypted2 = deCipher1.doFinal(encrpyted2);          //recieves decryptes Payment Information from customer
-
-        } catch (NoSuchAlgorithmException ex) {
-            Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (NoSuchPaddingException ex) {
+            deCipher1.init(Cipher.UNWRAP_MODE, kpair.getPrivateKey());
+            Key sessionkey2;
+            sessionkey2 = deCipher1.unwrap(authorizationmessage.encrypteddata.get(1), "AES", Cipher.SECRET_KEY);
+            Cipher desCipher = Cipher.getInstance("AES");
+            desCipher.init(Cipher.DECRYPT_MODE, sessionkey2);
+            byte[] transactionid = desCipher.doFinal(authorizationmessage.encrypteddata.get(0));
+            logging.append(localTime.now() + " Unwrapped session key: " + sessionkey2.getEncoded() + "\n");
+            logging.append(localTime.now() + " Decrypting response with above session key \n");
+            String[] message = new String(transactionid).split(":");
+            logging.append(localTime.now() + " Transaction id: " + message[1] + " Amount: " + message[0] + "\n");
+            //Decrypting the payment information from the client
+            decryptingpaymentfromcustomer();
+            logging.append(localTime.now() + " Finish Authorization Request\n\n");
+        } catch (Exception ex) {
             Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
         }
-
+        AuthorizationResponse();
     }
 
     //Sends string response "Valid" 
     //Wraps the reponse in with generated session key 
     //Encryptes session key using merchants publickey
     //Attaches request message to the  writeObject via Outstream object
-    public void sendAuthorizationResponse() throws NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, IOException {
-        authorizationResponseMessage.InitStringMessage.add("Valid");
-
-        KeyGenerator kgen = KeyGenerator.getInstance("AES", "BC");
-        kgen.init(256);
+    public void AuthorizationResponse() throws Exception {
+        logging.append(localTime.now() + " Start Authorization Response \n");
+        String result = "Invalid";
+        if (p.getname().contains(accounts[0].getName())) {
+            result = accounts[0].checkBalance(p.getAuthorizeammount());
+        }
+        authorizationResponseMessage.clearvariables();
+        KeyGenerator kgen = KeyGenerator.getInstance("AES");
+        kgen.init(128);
         SecretKey sessionkey3 = kgen.generateKey();
-
-        Cipher deCipher3;
-        deCipher3 = Cipher.getInstance("RSA");
-
+        logging.append(localTime.now() + " New session key generated" + sessionkey3.getEncoded() + "\n");
+        Cipher deCipher3 = Cipher.getInstance("AES");
         //encrypt using session key
         deCipher3.init(Cipher.ENCRYPT_MODE, sessionkey3);
-        byte[] encrpyted1 = deCipher3.update(authorizationResponseMessage.InitStringMessage.get(0).getBytes());
+        byte[] encrpyted1 = deCipher3.doFinal(result.getBytes());
+        logging.append(localTime.now() + " Encrypted authorization request with the above session key" + encrpyted1 + "\n");
 
-        deCipher3.init(Cipher.WRAP_MODE, Merchant_certificate.getPublicKey());
-        byte[] wrappedsessionkey3 = deCipher3.wrap(sessionkey3);
+        //Encrypt the sessionkey
+        Cipher deCipher = Cipher.getInstance("RSA");
+        deCipher.init(Cipher.WRAP_MODE, Merchant_certificate.getPublicKey());
+        byte[] wrappedsessionkey3 = deCipher.wrap(sessionkey3);
+        logging.append(localTime.now() + " Wrapped the session key with Merchant public key" + Merchant_certificate.getPublicKey() + "\n");
+
+        //Adds the encrypted message in index 0
+        //Adds the wrapped session key in index 1
         authorizationResponseMessage.encrypteddata.add(encrpyted1);
         authorizationResponseMessage.encrypteddata.add(wrappedsessionkey3);
-
+        //Adding the bank certificate in index 0
         authorizationResponseMessage.certificates.add(bankcertificate);
-
-        os.writeObject(authorizationResponseMessage);                                    //sends authorization response to merchant with String message Valid 
+        os.writeObject(authorizationResponseMessage);  //sends authorization response to merchant with String message Valid 
+        logging.append(localTime.now() + " Sent Respone to merchant\n");
+        logging.append(localTime.now() + " Finish Authorization Response\n\n");
     }
 
-    public void recievepayementCaptureRequest() throws InvalidKeyException, IOException, IllegalBlockSizeException, BadPaddingException {
+    public void processpayementCaptureRequest() throws Exception {
+        paymentauthorizationMessage.clearvariables();
+        paymentauthorizationMessage = (RequestMessage) is.readObject();
 
-        //byte[] auth_msg = authorizationmessage.encrypteddata.get(1);
-        Cipher deCipher5;
+        logging.append(localTime.now() + " Start of Payment Capture Processing\n");
         try {
-            deCipher5 = Cipher.getInstance("RSA");
-            deCipher5.init(Cipher.DECRYPT_MODE, kpair.getPrivateKey());
-            byte[] wrappedsessionkey4 = new byte[256];
+            logging.append(localTime.now() + " Unwrapping session key using own private key " + kpair.getPrivateKey().toString() + " to read the response. \nRecieved Response: " + authorizationmessage.encrypteddata.get(1) + "\n");
 
-            is.read(wrappedsessionkey4);
-            SecretKey sessionKey4 = (SecretKey) deCipher5.unwrap(wrappedsessionkey4, "AES", Cipher.SECRET_KEY);
+            Cipher deCipher5 = Cipher.getInstance("RSA");
+            deCipher5.init(Cipher.UNWRAP_MODE, kpair.getPrivateKey());
+            SecretKey sessionKey4 = (SecretKey) deCipher5.unwrap(paymentauthorizationMessage.encrypteddata.get(1), "AES", Cipher.SECRET_KEY);
 
-            byte[] encrpyted3 = new byte[256];
-            is.read(encrpyted3);
+            Cipher deCipher1 = Cipher.getInstance("AES");
+            deCipher1.init(Cipher.DECRYPT_MODE, sessionKey4);
+            byte[] decrypted3 = deCipher1.doFinal(paymentauthorizationMessage.encrypteddata.get(0));
+            logging.append(localTime.now() + " Unwrapped session key: " + sessionKey4.getEncoded() + "\n");
+            logging.append(localTime.now() + " Decrypting response with above session key \n");
 
-            deCipher5.init(Cipher.DECRYPT_MODE, sessionKey4);
-            byte[] decrypted3 = deCipher5.doFinal(encrpyted3);
-
+            String[] message = new String(decrypted3).split(":");
+            logging.append(localTime.now() + " Transaction id: " + message[1] + " Amount: " + message[0] + "\n");
+            logging.append(localTime.now() + " Finish of Payment Capture Processing\n\n");
         } catch (NoSuchAlgorithmException ex) {
             Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
         } catch (NoSuchPaddingException ex) {
             Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
         }
-
+        paymentCaptureResponse();
     }
 //    
 
-    public void sendpaymentCaptureResponse() throws NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, IOException {
-        paymentResponseMessage.InitStringMessage.add("Payment Response");
+    public void paymentCaptureResponse() throws Exception {
+        logging.append(localTime.now() + " Start of Payment Capture Response\n");
+        Boolean result = false;
+        String response = "Payment failed";
+        if (p.getname().contains(accounts[0].getName())) {
+            result = accounts[0].debit(p.getAuthorizeammount());
+            if (result) {
+                accounts[1].credit(p.getAuthorizeammount());
+                response = "Payment correctly captured";
+            } else {
+                logging.append("Not enough funds in the client's bank");
+            }
+        }
+        paymentResponseMessage.clearvariables();
 
-        KeyGenerator kgen = KeyGenerator.getInstance("AES", "BC");
-        kgen.init(256);
+        KeyGenerator kgen = KeyGenerator.getInstance("AES");
+        kgen.init(128);
         SecretKey sessionkey5 = kgen.generateKey();
+        logging.append(localTime.now() + " New session key generated" + sessionkey5.getEncoded() + "\n");
 
-        Cipher deCipher6;
-        deCipher6 = Cipher.getInstance("RSA");
+        Cipher deCipher6 = Cipher.getInstance("AES");
 
         //encrypt using session key
         deCipher6.init(Cipher.ENCRYPT_MODE, sessionkey5);
-        byte[] encrpyted4 = deCipher6.update(paymentResponseMessage.InitStringMessage.get(0).getBytes());
+        byte[] encrpyted4 = deCipher6.doFinal(response.getBytes());
+        logging.append(localTime.now() + " Encrypted authorization requst with the above session key" + encrpyted4 + "\n");
 
-        deCipher6.init(Cipher.WRAP_MODE, Merchant_certificate.getPublicKey());
-        byte[] wrappedsessionkey5 = deCipher6.wrap(sessionkey5);
+        Cipher deCipher7 = Cipher.getInstance("RSA");
+        deCipher7.init(Cipher.WRAP_MODE, Merchant_certificate.getPublicKey());
+        byte[] wrappedsessionkey5 = deCipher7.wrap(sessionkey5);
+        logging.append(localTime.now() + " Wrap session key with merchant public key" + Merchant_certificate.getPublicKey() + "\n");
+
+
+        //Add encrypted amount+transactionid in ecrypteddata index 0
+        //Add wrapped sessionkey 2 into encrypteddata index 1
         paymentResponseMessage.encrypteddata.add(encrpyted4);
         paymentResponseMessage.encrypteddata.add(wrappedsessionkey5);
-
         paymentResponseMessage.certificates.add(bankcertificate);
 
         os.writeObject(paymentResponseMessage);
+        os.flush();
+        logging.append(localTime.now() + " Sent Payment Capture Response from Bank\n");
+        logging.append(localTime.now() + " Finish Payment Capture Response\n\n");
+        while (true) {
+            if (reset() == false) {
+                break;
+            }
+        }
+
     }
 
-    public static X509Certificate createcertificate(CertAndKeyGen kgen) {
+    public boolean reset() throws IOException {
+        Boolean result = false;
+        try {
+            String mes = is.readUTF();
+            if (mes.contains("Reset")) {
+                logging.append("------------------------New Transaction -----------------------\n\n");
+                closeconnection();
+                openbankserver();
+                inittoMerchant();
+                result = true;
+            }
+        } catch (Exception ex) {
+            Logger.getLogger(Bank.class.getName()).log(Level.SEVERE, null, ex);
+            //System.out.println("Error occured when checking for new order" + ex);
+        }
+        return result;
+    }
+
+    public X509Certificate createcertificate(CertAndKeyGen kgen) {
         X509Certificate certificate = null;
         try {
             //Generate self signed certificate
@@ -230,37 +295,32 @@ public class Bank {
         return kpair;
     }
 
-//    public void decryptingpaymentfromcustomer() throws IOException, ClassNotFoundException {;;;
-//        RequestMessage purchasemessage = new RequestMessage();
-//        //Recieve the object
-//        purchasemessage = (RequestMessage) is.readObject();
-//        SealedObject s_payment = purchasemessage.sealedobject.get(0);
-//        try {
-//            //Decrypt the session key using own private key
-//            Cipher desCipher2 = Cipher.getInstance("RSA");
-//            Key sessionkey;
-//            desCipher2.init(Cipher.UNWRAP_MODE, kpair.getPrivateKey());
-//            sessionkey = desCipher2.unwrap(purchasemessage.encrypteddata.get(1), "AES", Cipher.SECRET_KEY);
-//
-//            // Decrypting the payment object using the unwrapped session key
-//            Cipher desCipher = Cipher.getInstance("AES");
-//            desCipher.init(Cipher.DECRYPT_MODE, sessionkey);
-//            p = (Payment) s_payment.getObject(desCipher);
-//            System.out.println(p.getFname() + p.getLname() + p.getAddress() + p.getCredicardnumber());
-//            checkCustomerAccountability();
-//        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException | BadPaddingException ex) {
-//            Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
-//        }
-//
-//    }
-    public static void main(String args[]) throws IOException, ClassNotFoundException {
-
+    public void decryptingpaymentfromcustomer() throws IOException, ClassNotFoundException {
+        SealedObject s_payment = authorizationmessage.sealedobject.get(0);
         try {
-            Bank a = new Bank();
-            a.openbankserver();
-        } catch (IOException e) {
-            System.out.println(e);
+            //Decrypt the session key using own private key
+            Cipher desCipher2 = Cipher.getInstance("RSA");
+            Key sessionkey;
+            desCipher2.init(Cipher.UNWRAP_MODE, kpair.getPrivateKey());
+            sessionkey = desCipher2.unwrap(authorizationmessage.encrypteddata.get(2), "AES", Cipher.SECRET_KEY);
+
+            // Decrypting the payment object using the unwrapped session key
+            Cipher desCipher = Cipher.getInstance("AES");
+            desCipher.init(Cipher.DECRYPT_MODE, sessionkey);
+            p = (Payment) s_payment.getObject(desCipher);
+            logging.append("Payment Details is: " + p.getname() + " Address: " + p.getAddress()+" \n");
+            //checkCustomerAccountability();
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException | BadPaddingException ex) {
+            Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
         }
+
     }
 
+    public void closeconnection() throws IOException {
+        os.close();
+        is.close();
+        merchantSocket.close();
+        BankServer.close();
+        server_opened = false;
+    }
 }

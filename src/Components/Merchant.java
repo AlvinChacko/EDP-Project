@@ -16,19 +16,20 @@ package Components;
  */
 import java.io.*;
 import OrderInfo.Order;
-import OrderInfo.Payment;
 import java.io.IOException;
-import static java.lang.Math.random;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.InvalidKeyException;
 import java.security.Key;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.text.DecimalFormat;
+import java.time.LocalTime;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -39,6 +40,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SealedObject;
 import javax.crypto.SecretKey;
+import javax.swing.JTextArea;
 import sun.security.tools.keytool.CertAndKeyGen;
 import sun.security.x509.X500Name;
 
@@ -50,211 +52,313 @@ public class Merchant {
 
     static X509Certificate bankcertificate;
     static X509Certificate customercertificate;
-
-    static ServerSocket MerchantServer = null;
-    static Socket clientSocket = null;
-    static Socket Bank = null;
-//    static DataOutputStream os = null;
-//    static DataInputStream is = null;
-    static ObjectOutputStream b_os2 = null; // Bank output stream
-    static ObjectInputStream b_is2 = null; // Bank input stream
-
-    static ObjectOutputStream c_os = null; //Client output stream
-    static ObjectInputStream c_is = null; //Client input stream
-
-    static String transcationID;
+    JTextArea logging;
+    ServerSocket MerchantServer = null;
+    Socket clientSocket = null;
+    Socket Bank = null;
+    ObjectOutputStream b_os2 = null; // Bank output stream
+    ObjectInputStream b_is2 = null; // Bank input stream
+    ObjectOutputStream c_os = null; //Client output stream
+    ObjectInputStream c_is = null; //Client input stream
+    String transcationID;
     static CertAndKeyGen keypair = generateKeypair(); // Generating keypair for merchant
-
     static X509Certificate merchantcertificate = createcertificate(keypair); //Self signed certificate
-
     static RequestMessage message = new RequestMessage(); //Request Message that needs to be sent around
-
     static RequestMessage purchasemessage = new RequestMessage();
-    
     static Order order;
+    boolean bank_connected = false;
+    boolean server_opened = false;
+    DecimalFormat numberFormat = new DecimalFormat("#.00");
+    LocalTime localTime;
 
-    public static void openclientserver() throws IOException, ClassNotFoundException {
-        MerchantServer = new ServerSocket(9999);
-        clientSocket = MerchantServer.accept();
-        c_os = new ObjectOutputStream(clientSocket.getOutputStream());
-        c_is = new ObjectInputStream(clientSocket.getInputStream());
-        System.out.println("Conected");
+    public Merchant(JTextArea textarea) {
+        this.logging = textarea;
+    }
+
+    public void openclientserver() throws Exception {
+        if (server_opened == false) {
+            MerchantServer = new ServerSocket(9999);
+            clientSocket = MerchantServer.accept();
+            server_opened = true;
+            c_os = new ObjectOutputStream(clientSocket.getOutputStream());
+            c_is = new ObjectInputStream(clientSocket.getInputStream());
+            logging.append(localTime.now() + " Client 1 has connected\n\n");
+        } else {
+            logging.append(localTime.now() + " Client has already connected\n");
+        }
+    }
+
+    public void connecttobank() throws IOException, ClassNotFoundException {
+        if (bank_connected == false) {
+            Bank = new Socket("127.0.0.1", 1000);
+            b_is2 = new ObjectInputStream(Bank.getInputStream());
+            b_os2 = new ObjectOutputStream(Bank.getOutputStream());
+            bankcertificate = (X509Certificate) b_is2.readObject();
+            bank_connected = true;
+            logging.append(localTime.now() + " Connected to bank\n\n");
+        } else {
+            logging.append(localTime.now() + " Connected to bank already...\n");
+        }
+    }
+
+    public void retriveclientbankbalance() {
+        try {
+            b_os2.writeUTF("Check Balance");
+            b_os2.flush();
+            Double amount = b_is2.readDouble();
+            c_os.writeDouble(amount);
+            c_os.flush();
+            reset();
+        } catch (IOException ex) {
+            Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    public void initiaterequest() throws Exception {
         RequestMessage initmessage = new RequestMessage();
         initmessage.clearvariables();
-        initmessage = (RequestMessage) c_is.readObject();
-        if (initmessage.InitStringMessage.contains("Initiate")) {
-            connecttobank();
-            initiateresponse();
-            purchasemessage = (RequestMessage) c_is.readObject();
-            if (purchasemessage.InitStringMessage.contains("Purchase Request")) {
-                purchaserequestprocessing();
+        if (bank_connected == true) {
+            if (c_is.readUTF().contains("Check Balance")) {
+                retriveclientbankbalance();
+            } else {
+                b_os2.writeUTF(" ");
+                b_os2.flush();
+                initmessage = (RequestMessage) c_is.readObject();
+                if (initmessage.InitStringMessage.contains("Initiate")) {
+                    logging.append(localTime.now() + " Start of initateresponse\n");
+                    //assign a unique transcation id 
+                    message.clearvariables();
+                    transcationID = UUID.randomUUID().toString();
+                    message.InitStringMessage.add(transcationID);
+                    message.certificates.add(merchantcertificate);
+                    logging.append(localTime.now() + " Sent merchant certificate. Public key: " + merchantcertificate.getPublicKey() + "\n");
+                    message.certificates.add(bankcertificate);
+                    logging.append(localTime.now() + " Sent bank certificate. Public key: " + bankcertificate.getPublicKey() + "\n");
+                    c_os.writeObject(message);
+                    logging.append(localTime.now() + " Finish initateresponse\n\n");
+                    purchasemessage.clearvariables();
+                    purchasemessage = (RequestMessage) c_is.readObject();
+                    if (purchasemessage.InitStringMessage.contains("Purchase Request")) {
+                        purchaserequestprocessing();
+                        authorizationrequest();
+                    }
+                    responseprocessing();
+                    payementcapturerequest();
+                    processingofresponse();
+                } else {
+                    logging.append(localTime.now() + " Bank not connected\n");
+                }
             }
         }
     }
 
-    public static void initiateresponse() throws IOException {
-        //assign a unique transcation id 
-        transcationID = UUID.randomUUID().toString();
-        message.InitStringMessage.add(transcationID);
-        message.certificates.add(merchantcertificate);
-        message.certificates.add(bankcertificate);
-        c_os.writeObject(message);
-//        os2.writeObject( merchantcertificate);
-//        os2.writeObject( bankcertificate);
-
-    }
-
-    public static void purchaserequestprocessing() throws IOException, ClassNotFoundException {
+    public void purchaserequestprocessing() throws Exception {
+        logging.append(localTime.now() + " Start of purchase request processing\n");
         customercertificate = purchasemessage.certificates.get(0);
+        logging.append(localTime.now() + " Recieved client certificate. Public key: " + customercertificate.getPublicKey() + "\n");
         SealedObject s_order = purchasemessage.sealedobject.get(1);
+        logging.append(localTime.now() + " Recieved sealed encrypted order. Algorithm used: " + s_order.getAlgorithm() + " \nRecieved object: " +s_order.toString() + " \n");
         // Decrypting the order object using own private key
         try {
+            logging.append(localTime.now() + " Decrypting Order information:\n");
+            logging.append(localTime.now() + " Encrypted Session key: " + purchasemessage.encrypteddata.get(2) + " \n");
             Cipher desCipher2 = Cipher.getInstance("RSA");
             Key sessionkey;
             desCipher2.init(Cipher.UNWRAP_MODE, keypair.getPrivateKey());
             sessionkey = desCipher2.unwrap(purchasemessage.encrypteddata.get(2), "AES", Cipher.SECRET_KEY);
-
-            // Decrypting the payment object using the unwrapped session key
+            logging.append(localTime.now() + " Decrypted session key: " + sessionkey.getEncoded() + "\n");
+            // Decrypting the order object using the unwrapped session key
             Cipher desCipher = Cipher.getInstance("AES");
             desCipher.init(Cipher.DECRYPT_MODE, sessionkey);
             order = (Order) s_order.getObject(desCipher);
-            System.out.println("Recieved the order from client: " + order.getTransaction_id());
+            logging.append(localTime.now() + " Finish decrypting order details. Detail are: \n");
+            logging.append(localTime.now() + " Recieved the order from client: " + order.getTransaction_id() + "\n");
         } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException | BadPaddingException ex) {
             Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
         }
         ///CHECK IF DUAL SIGNATURE IS CORRECT
+        logging.append(localTime.now() + " Start of dual signature check\n");
+        byte[] dual_signature = purchasemessage.encrypteddata.get(0);
+        byte[] orderdigest = purchasemessage.encrypteddata.get(3);
+        byte[] paymentdigest = purchasemessage.encrypteddata.get(4);
+        logging.append(localTime.now() + " Recieved dual signature" + dual_signature + "\n");
+        logging.append(localTime.now() + " Recieved order digest" + orderdigest + "\n");
+        logging.append(localTime.now() + " Recieved order digest" + paymentdigest + "\n");
+
+        MessageDigest duals = MessageDigest.getInstance("SHA-1");
+        duals.update(orderdigest);
+        duals.update(paymentdigest);
+        byte[] combinedMD = duals.digest(); // Create the digest of the combined
+        logging.append(localTime.now() + " Generated order and payment digest" + combinedMD + "\n");
+        boolean check = verifySignature(combinedMD, dual_signature);
         //send purchase response 
-        c_os.writeUTF("Purchase Processing Completed");
+        if (check == true) {
+            logging.append(localTime.now() + " Dual Signature verified. \n");
+            c_os.writeUTF("Purchase Processing Completed");
+            c_os.flush();
+            logging.append(localTime.now() + " Finish purchase request processing\n\n");
+        }
     }
 
     // Used to verify the digital signature, params are data to be checked and the signature
     public boolean verifySignature(byte[] data, byte[] signature) throws Exception {
         Signature sig = Signature.getInstance("SHA1withRSA");
+        logging.append(localTime.now() + " Signing signature with client public key \n");
         sig.initVerify(customercertificate.getPublicKey());
         sig.update(data);
         return sig.verify(signature);
     }
 
     //Payment authorization phase
-    public static void authorizationrequest() throws IOException, ClassNotFoundException, NoSuchAlgorithmException, NoSuchProviderException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, BadPaddingException {
-
+    public void authorizationrequest() throws IOException, ClassNotFoundException, NoSuchAlgorithmException, NoSuchProviderException, IllegalBlockSizeException, InvalidKeyException, NoSuchPaddingException, BadPaddingException {
+        logging.append(localTime.now() + " Start authorization request processing\n");
         message.clearvariables();
-
-        //message for authorization
-        message.InitStringMessage.add("500");
-        message.InitStringMessage.add(transcationID);
+        message.InitStringMessage.add("Authorization Request");
 
         //generate sessionkey
-        KeyGenerator kgen = KeyGenerator.getInstance("AES", "BC");
-        kgen.init(256);
+        KeyGenerator kgen = KeyGenerator.getInstance("AES");
+        kgen.init(128);
         SecretKey sessionkey = kgen.generateKey();
-
+        logging.append(localTime.now() + " New session key generated" + sessionkey.getEncoded() + "\n");
         Cipher desCipher;
-        desCipher = Cipher.getInstance("RSA");
-
+        desCipher = Cipher.getInstance("AES");
         //encrypt using session key
         desCipher.init(Cipher.ENCRYPT_MODE, sessionkey);
-        byte[] encrpyted1 = desCipher.update(message.InitStringMessage.get(0).getBytes());
-        byte[] encrpyted2 = desCipher.doFinal(message.InitStringMessage.get(1).getBytes());
-        desCipher.init(Cipher.WRAP_MODE, bankcertificate.getPublicKey());
-        byte[] wrappedsessionkey = desCipher.wrap(sessionkey);
+        desCipher.update((numberFormat.format(order.getTotal()) + ":").getBytes());
+        byte[] encrpyted1 = desCipher.doFinal(order.getTransaction_id().getBytes());
+        logging.append(localTime.now() + " Encrypted authorization requst with the above session key" + encrpyted1 + "\n");
+
+        Cipher desCipher2;
+        desCipher2 = Cipher.getInstance("RSA");
+        desCipher2.init(Cipher.WRAP_MODE, bankcertificate.getPublicKey());
+        byte[] wrappedsessionkey = desCipher2.wrap(sessionkey);
+        logging.append(localTime.now() + " Wrapped the session key with bank public key: " + bankcertificate.getPublicKey() + "\n Result: " + wrappedsessionkey + "\n");
+
+        //Add encrypted amount+transactionid in ecrypteddata index 0
+        //Add wrapped sessionkey 2 into encrypteddata index 1
         message.encrypteddata.add(encrpyted1);
-        message.encrypteddata.add(encrpyted2);
         message.encrypteddata.add(wrappedsessionkey);
 
-        //TO DO: SEND PI AND SESSION KEY 1
+        //Payment Sealed object in index 0 of sealedobject
+        // Session key 1 into the ecrypteddata index 2
+        message.sealedobject.add(purchasemessage.sealedobject.get(0));
+        message.encrypteddata.add(purchasemessage.encrypteddata.get(1));
+
+        //Add customercertificate in index 0 and merchantcertificate in 1
         message.certificates.add(customercertificate);
         message.certificates.add(merchantcertificate);
 
         b_os2.writeObject(message);
+        logging.append(localTime.now() + " Sent the authorization message\n");
+        logging.append(localTime.now() + " Finish authorization request processing\n\n");
     }
 
-    public static void responseprocessing() throws IOException, ClassNotFoundException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
-        Cipher desCipher;
-        desCipher = Cipher.getInstance("RSA");
+    public void responseprocessing() throws IOException, ClassNotFoundException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        message.clearvariables();
+        message = (RequestMessage) b_is2.readObject();
+
+        logging.append(localTime.now() + " Start Authorization Response Processing\n");
+        logging.append(localTime.now() + " Unwrapping session key using own private key " + keypair.getPrivateKey().toString() + " to read the response. \nRecieved Response: " + message.encrypteddata.get(1) + "\n");
+
+        Cipher desCipher = Cipher.getInstance("RSA");
         desCipher.init(Cipher.UNWRAP_MODE, keypair.getPrivateKey());
 
-        byte[] wrappedsessionkey3 = new byte[256];
-
-        b_is2.read(wrappedsessionkey3);
-        SecretKey sessionKey3 = (SecretKey) desCipher.unwrap(wrappedsessionkey3, "AES", Cipher.SECRET_KEY);
-
-        byte[] encrpyted = new byte[256];
-        b_is2.read(encrpyted);
-
-        desCipher.init(Cipher.DECRYPT_MODE, sessionKey3);
-        byte[] decrypted = desCipher.doFinal(encrpyted);
+        SecretKey sessionKey3 = (SecretKey) desCipher.unwrap(message.encrypteddata.get(1), "AES", Cipher.SECRET_KEY);
+        logging.append(localTime.now() + " Unwrapped session key: " + sessionKey3.getEncoded() + "\n");
+        logging.append(localTime.now() + " Decrypting response with above session key \n");
+        Cipher desCipher2 = Cipher.getInstance("AES");
+        desCipher2.init(Cipher.DECRYPT_MODE, sessionKey3);
+        byte[] response = desCipher2.doFinal(message.encrypteddata.get(0));
+        logging.append(localTime.now() + " Response is: " + new String(response) + "\n");
+        logging.append(localTime.now() + " Finish Authorization Response Processing\n\n");
 
     }
 
     //Payment Capture Phase
-    public static void payementcapturerequest() throws IOException, ClassNotFoundException {
-
+    public void payementcapturerequest() throws IOException, ClassNotFoundException {
+        message.clearvariables();
         //message for authorization
-        message.InitStringMessage.add("500");
-        message.InitStringMessage.add(transcationID);
-
+        logging.append(localTime.now() + " Start of Payment Capture Request\n");
         try {
             //generate sessionkey
-            KeyGenerator kgen = KeyGenerator.getInstance("AES", "BC");
-            kgen.init(256);
+            KeyGenerator kgen = KeyGenerator.getInstance("AES");
+            kgen.init(128);
             SecretKey sessionkey = kgen.generateKey();
+            logging.append(localTime.now() + " New session key generated " + sessionkey.getEncoded()+ "\n");
 
             Cipher desCipher;
-            desCipher = Cipher.getInstance("RSA");
-
+            desCipher = Cipher.getInstance("AES");
             //encrypt using session key
             desCipher.init(Cipher.ENCRYPT_MODE, sessionkey);
-            byte[] encrpyted = desCipher.doFinal(message.InitStringMessage.toString().getBytes());
+            desCipher.update((numberFormat.format(order.getTotal()) + ":").getBytes());
+            byte[] encrpyted1 = desCipher.doFinal(order.getTransaction_id().getBytes());
+            logging.append(localTime.now() + " Encrypted authorization request with the above session key" + encrpyted1 + "\n");
 
             desCipher = Cipher.getInstance("RSA");
             desCipher.init(Cipher.WRAP_MODE, bankcertificate.getPublicKey());
             byte[] wrappedsessionkey = desCipher.wrap(sessionkey);
+            logging.append(localTime.now() + " Wrapped the session key with bank public key: " + bankcertificate.getPublicKey() + "\n Result: " + wrappedsessionkey + "\n");
 
-            //send stuff
-            //message
-            b_os2.write(wrappedsessionkey);
-            b_os2.write(encrpyted);
+            //Add encrypted amount+transactionid in ecrypteddata index 0
+            //Add wrapped sessionkey into encrypteddata index 1
+            message.encrypteddata.add(encrpyted1);
+            message.encrypteddata.add(wrappedsessionkey);
+            //send message
+            message.certificates.add(merchantcertificate);
+            b_os2.writeObject(message);
+            logging.append(localTime.now() + " Sent the payment capture message\n");
+            logging.append(localTime.now() + " Finish Payment Capture Request\n\n");
         } catch (Exception E) {
 
         }
-
-        message.certificates.add(merchantcertificate);
-
-        b_os2.writeObject(message);
     }
 
-    public static void processingofresponse() throws IOException, ClassNotFoundException {
+    public void processingofresponse() throws Exception {
+        message.clearvariables();
+        message = (RequestMessage) b_is2.readObject();
+
+        logging.append(localTime.now() + " Start of Payment Response Processing\n");
+
         try {
-            Cipher desCipher;
-            desCipher = Cipher.getInstance("RSA");
+            logging.append(localTime.now() + " Unwrapping session key using own private key" + keypair.getPrivateKey().toString() + " to read the response. \nRecieved Response: " + message.encrypteddata.get(1) + "\n");
+            Cipher desCipher = Cipher.getInstance("RSA");
             desCipher.init(Cipher.UNWRAP_MODE, keypair.getPrivateKey());
 
-            byte[] wrappedsessionkey3 = new byte[256];
-
-            b_is2.read(wrappedsessionkey3);
-            SecretKey sessionKey3 = (SecretKey) desCipher.unwrap(wrappedsessionkey3, "AES", Cipher.SECRET_KEY);
-
-            byte[] encrpyted = new byte[256];
-            b_is2.read(encrpyted);
-
-            desCipher.init(Cipher.DECRYPT_MODE, sessionKey3);
-            byte[] decrypted = desCipher.doFinal(encrpyted);
+            SecretKey sessionKey3 = (SecretKey) desCipher.unwrap(message.encrypteddata.get(1), "AES", Cipher.SECRET_KEY);
+            logging.append(localTime.now() + " Unwrapped session key: " + sessionKey3.getEncoded()+ "\n");
+            logging.append(localTime.now() + " Decrypting response with above session key \n");
+            Cipher desCipher2 = Cipher.getInstance("AES");
+            desCipher2.init(Cipher.DECRYPT_MODE, sessionKey3);
+            byte[] response = desCipher2.doFinal(message.encrypteddata.get(0));
+            logging.append(localTime.now() + " Payment Response is: " + new String(response) + "\n");
+            logging.append(localTime.now() + " Finish of Payment Response Processing\n\n");
+            reset();
         } catch (Exception E) {
 
         }
     }
 
-    public static void connecttobank() throws IOException, ClassNotFoundException {
-        Bank = new Socket("127.0.0.1", 1000);
-        b_is2 = new ObjectInputStream(Bank.getInputStream());
-        b_os2 = new ObjectOutputStream(Bank.getOutputStream());
-        b_os2.writeUTF("Connected to Bank");
-        b_os2.writeUTF("Send your certificate");
-        bankcertificate = (X509Certificate) b_is2.readObject();
+    public void reset() {
+        while (true) {
+            try {
+                String mes = c_is.readUTF();
+                if (mes.contains("Reset")) {
+                    b_os2.writeUTF("Reset");
+                    b_os2.flush();
+                    logging.append("------------------------New Transaction -----------------------\n\n");
+                    close_servers();
+                    openclientserver();
+                    connecttobank();
+                    initiaterequest();
+                    break;
+                }
+            } catch (Exception ex) {
+                Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
     }
 
-    public static X509Certificate createcertificate(CertAndKeyGen kgen) {
+    private static X509Certificate createcertificate(CertAndKeyGen kgen) {
         X509Certificate certificate = null;
         try {
             //Generate self signed certificate
@@ -266,7 +370,7 @@ public class Merchant {
         return certificate;
     }
 
-    public static CertAndKeyGen generateKeypair() {
+    private static CertAndKeyGen generateKeypair() {
         CertAndKeyGen kpair = null;
         try {
             kpair = new CertAndKeyGen("RSA", "SHA1WithRSA", null);
@@ -277,7 +381,7 @@ public class Merchant {
         return kpair;
     }
 
-    public static void close_servers() {
+    public void close_servers() {
         try {
             //Close bank sockets
             b_os2.close();
@@ -289,19 +393,11 @@ public class Merchant {
             c_is.close();
             clientSocket.close();
             MerchantServer.close();
+            bank_connected = false;
+            server_opened = false;
         } catch (IOException ex) {
             Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
-    public static void main(String args[]) throws ClassNotFoundException, InterruptedException {
-        //Creating certificate and keypair. You can use keypair to get public and private key
-
-        try {
-            openclientserver();
-        } catch (IOException ex) {
-            Logger.getLogger(Merchant.class.getName()).log(Level.SEVERE, null, ex);
-        }
-
-    }
 }

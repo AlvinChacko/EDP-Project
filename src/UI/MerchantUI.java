@@ -5,11 +5,13 @@
  */
 package UI;
 
+import Components.Merchant;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -19,11 +21,12 @@ import java.util.logging.Logger;
  */
 public class MerchantUI extends javax.swing.JFrame {
 
-    /**
-     * Creates new form MerchantUI
-     */
+    static Merchant verosis;
+    static boolean server_thrad_created = false;
+
     public MerchantUI() {
         initComponents();
+        verosis = new Merchant(logging);
     }
 
     /**
@@ -35,83 +38,217 @@ public class MerchantUI extends javax.swing.JFrame {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        jLabel1 = new javax.swing.JLabel();
-        connectbank = new javax.swing.JButton();
-        jScrollPane1 = new javax.swing.JScrollPane();
-        info = new javax.swing.JTextArea();
-        jLabel2 = new javax.swing.JLabel();
+        init = new javax.swing.JPanel();
+        jPanel5 = new javax.swing.JPanel();
+        jLabel28 = new javax.swing.JLabel();
+        jLabel30 = new javax.swing.JLabel();
+        merchant = new javax.swing.JPanel();
+        jLabel31 = new javax.swing.JLabel();
+        jLabel35 = new javax.swing.JLabel();
+        bank = new javax.swing.JPanel();
+        jLabel32 = new javax.swing.JLabel();
+        jLabel33 = new javax.swing.JLabel();
+        jScrollPane2 = new javax.swing.JScrollPane();
+        logging = new javax.swing.JTextArea();
+        jLabel34 = new javax.swing.JLabel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
-        jLabel1.setFont(new java.awt.Font("Tahoma", 0, 36)); // NOI18N
-        jLabel1.setText("Merchant");
+        init.setBackground(new java.awt.Color(255, 255, 255));
+        init.setAutoscrolls(true);
+        init.setPreferredSize(new java.awt.Dimension(500, 500));
 
-        connectbank.setText("Connect to Bank Server");
-        connectbank.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                connectbankActionPerformed(evt);
+        jPanel5.setBackground(new java.awt.Color(0, 204, 102));
+        jPanel5.setFont(new java.awt.Font("Intro ", 0, 24)); // NOI18N
+
+        jLabel28.setFont(new java.awt.Font("Intro ", 0, 24)); // NOI18N
+        jLabel28.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel28.setIcon(new javax.swing.ImageIcon(getClass().getResource("/UI/images/logo.png"))); // NOI18N
+        jLabel28.setText("Verosis system");
+
+        jLabel30.setIcon(new javax.swing.ImageIcon(getClass().getResource("/UI/images/nightwing_logo_by_machsabre-d4lg7oy.png"))); // NOI18N
+
+        javax.swing.GroupLayout jPanel5Layout = new javax.swing.GroupLayout(jPanel5);
+        jPanel5.setLayout(jPanel5Layout);
+        jPanel5Layout.setHorizontalGroup(
+            jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel5Layout.createSequentialGroup()
+                .addGap(45, 45, 45)
+                .addComponent(jLabel28, javax.swing.GroupLayout.PREFERRED_SIZE, 325, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(18, 18, 18)
+                .addComponent(jLabel30)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+        );
+        jPanel5Layout.setVerticalGroup(
+            jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jLabel28, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel5Layout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jLabel30, javax.swing.GroupLayout.PREFERRED_SIZE, 60, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap())
+        );
+
+        merchant.setBackground(new java.awt.Color(241, 250, 238));
+        merchant.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                openserver(evt);
             }
         });
 
-        info.setEditable(false);
-        info.setColumns(20);
-        info.setRows(5);
-        jScrollPane1.setViewportView(info);
+        jLabel31.setFont(new java.awt.Font("Nexa Bold", 0, 14)); // NOI18N
+        jLabel31.setForeground(new java.awt.Color(69, 123, 157));
+        jLabel31.setText("Start Server");
 
-        jLabel2.setText("Logging");
+        jLabel35.setIcon(new javax.swing.ImageIcon(getClass().getResource("/UI/images/server.png"))); // NOI18N
+
+        javax.swing.GroupLayout merchantLayout = new javax.swing.GroupLayout(merchant);
+        merchant.setLayout(merchantLayout);
+        merchantLayout.setHorizontalGroup(
+            merchantLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(merchantLayout.createSequentialGroup()
+                .addContainerGap()
+                .addGroup(merchantLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(jLabel35)
+                    .addComponent(jLabel31))
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+        );
+        merchantLayout.setVerticalGroup(
+            merchantLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(merchantLayout.createSequentialGroup()
+                .addGap(6, 6, 6)
+                .addComponent(jLabel35, javax.swing.GroupLayout.PREFERRED_SIZE, 68, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jLabel31)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+        );
+
+        bank.setBackground(new java.awt.Color(241, 250, 238));
+        bank.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                bankMouseClicked(evt);
+            }
+        });
+
+        jLabel32.setIcon(new javax.swing.ImageIcon(getClass().getResource("/UI/images/bank.png"))); // NOI18N
+
+        jLabel33.setFont(new java.awt.Font("Nexa Bold", 0, 14)); // NOI18N
+        jLabel33.setForeground(new java.awt.Color(69, 123, 157));
+        jLabel33.setText("Connect to Bank");
+
+        javax.swing.GroupLayout bankLayout = new javax.swing.GroupLayout(bank);
+        bank.setLayout(bankLayout);
+        bankLayout.setHorizontalGroup(
+            bankLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(bankLayout.createSequentialGroup()
+                .addGap(21, 21, 21)
+                .addGroup(bankLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.CENTER)
+                    .addComponent(jLabel33)
+                    .addComponent(jLabel32))
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+        );
+        bankLayout.setVerticalGroup(
+            bankLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, bankLayout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jLabel32, javax.swing.GroupLayout.PREFERRED_SIZE, 60, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jLabel33)
+                .addGap(62, 62, 62))
+        );
+
+        logging.setEditable(false);
+        logging.setColumns(20);
+        logging.setFont(new java.awt.Font("Gill Sans MT", 0, 14)); // NOI18N
+        logging.setRows(5);
+        jScrollPane2.setViewportView(logging);
+
+        jLabel34.setFont(new java.awt.Font("Impact", 0, 24)); // NOI18N
+        jLabel34.setText("Logging");
+
+        javax.swing.GroupLayout initLayout = new javax.swing.GroupLayout(init);
+        init.setLayout(initLayout);
+        initLayout.setHorizontalGroup(
+            initLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jPanel5, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addGroup(initLayout.createSequentialGroup()
+                .addGap(186, 186, 186)
+                .addComponent(merchant, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 237, Short.MAX_VALUE)
+                .addComponent(bank, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(137, 137, 137))
+            .addGroup(initLayout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jScrollPane2)
+                .addContainerGap())
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, initLayout.createSequentialGroup()
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jLabel34)
+                .addGap(349, 349, 349))
+        );
+        initLayout.setVerticalGroup(
+            initLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(initLayout.createSequentialGroup()
+                .addComponent(jPanel5, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(41, 41, 41)
+                .addGroup(initLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(bank, javax.swing.GroupLayout.PREFERRED_SIZE, 97, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(merchant, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jLabel34)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 232, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(72, 72, 72))
+        );
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(layout.createSequentialGroup()
-                        .addGap(99, 99, 99)
-                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 225, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addGroup(layout.createSequentialGroup()
-                        .addGap(124, 124, 124)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                            .addComponent(connectbank)
-                            .addComponent(jLabel1))))
-                .addContainerGap(76, Short.MAX_VALUE))
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
-                .addGap(0, 0, Short.MAX_VALUE)
-                .addComponent(jLabel2)
-                .addGap(180, 180, 180))
+                .addComponent(init, javax.swing.GroupLayout.PREFERRED_SIZE, 807, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(0, 0, Short.MAX_VALUE))
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addGap(21, 21, 21)
-                .addComponent(jLabel1)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 41, Short.MAX_VALUE)
-                .addComponent(connectbank, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(31, 31, 31)
-                .addComponent(jLabel2)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap())
+                .addComponent(init, javax.swing.GroupLayout.PREFERRED_SIZE, 521, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(0, 11, Short.MAX_VALUE))
         );
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
-    private void connectbankActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_connectbankActionPerformed
-        Socket Bank = null;
-        try {
-            Bank = new Socket("127.0.0.1", 1000);
-            DataInputStream is2 = new DataInputStream(Bank.getInputStream());
-            DataOutputStream os2 = new DataOutputStream(Bank.getOutputStream());
-            os2.writeUTF("Connected to Merchant");
-            info.setText(info.getText().trim()+"\nConected to bank");
-            os2.close();
-            is2.close();
-            Bank.close();
-        } catch (IOException ex) {
-            Logger.getLogger(MerchantUI.class.getName()).log(Level.SEVERE, null, ex);
+    private void openserver(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_openserver
+        if (server_thrad_created == false) {
+            server_thrad_created = true;
+            Executors.newSingleThreadExecutor().execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        logging.append("Starting server.................\n");
+                        verosis.openclientserver();
+                        verosis.initiaterequest();
+                    } catch (Exception ex) {
+                        Logger.getLogger(ClientUI.class.getName()).log(Level.SEVERE, null, ex);
+                        logging.append("An Error has occured. Please try again!\n");
+                    }
+                }
+            });
         }
-    }//GEN-LAST:event_connectbankActionPerformed
+        else{
+            logging.append("Server thread instance already running\n");
+        }
+    }//GEN-LAST:event_openserver
+
+    private void bankMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_bankMouseClicked
+        // TODO add your handling code here:
+        try {
+            verosis.connecttobank();
+        } catch (Exception ex) {
+            Logger.getLogger(ClientUI.class.getName()).log(Level.SEVERE, null, ex);
+            logging.append("Cannot connect to Bank. Please try again!\n");
+        }
+    }//GEN-LAST:event_bankMouseClicked
 
     /**
      * @param args the command line arguments
@@ -139,35 +276,27 @@ public class MerchantUI extends javax.swing.JFrame {
             java.util.logging.Logger.getLogger(MerchantUI.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
         }
         //</editor-fold>
-        ServerSocket MerchantServer = null;
-        Socket clientSocket = null;
         /* Create and display the form */
         java.awt.EventQueue.invokeLater(new Runnable() {
             public void run() {
                 new MerchantUI().setVisible(true);
             }
         });
-        try {
-            MerchantServer = new ServerSocket(9999);
-            clientSocket = MerchantServer.accept();
-            DataOutputStream os = new DataOutputStream(clientSocket.getOutputStream());
-            DataInputStream is = new DataInputStream(clientSocket.getInputStream());
-            os.writeUTF("Connected to Merchant");
-            info.setText("Conected to client");
-            os.close();
-            is.close();
-            clientSocket.close();
-            MerchantServer.close();
-        } catch (IOException ex) {
-            Logger.getLogger(MerchantUI.class.getName()).log(Level.SEVERE, null, ex);
-        }
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JButton connectbank;
-    private static javax.swing.JTextArea info;
-    private javax.swing.JLabel jLabel1;
-    private javax.swing.JLabel jLabel2;
-    private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JPanel bank;
+    private javax.swing.JPanel init;
+    private javax.swing.JLabel jLabel28;
+    private javax.swing.JLabel jLabel30;
+    private javax.swing.JLabel jLabel31;
+    private javax.swing.JLabel jLabel32;
+    private javax.swing.JLabel jLabel33;
+    private javax.swing.JLabel jLabel34;
+    private javax.swing.JLabel jLabel35;
+    private javax.swing.JPanel jPanel5;
+    private javax.swing.JScrollPane jScrollPane2;
+    private javax.swing.JTextArea logging;
+    private javax.swing.JPanel merchant;
     // End of variables declaration//GEN-END:variables
 }
